@@ -1,0 +1,22 @@
+{
+  "firmwareSourceSha256": "001f5701e5f792207db7a8168d6778c3fd329cad4bebb05fe7aa7e5011764abf",
+  "fqbn": "esp8266:esp8266:nodemcuv2",
+  "uploadPerformed": false,
+  "files": [
+    {
+      "path": "build/v7/CoffeeMachine.ino.bin",
+      "bytes": 275248,
+      "sha256": "2be2cc660732f44a754070d8b2150739dd0cc117b331081c162ad61b5cf6336e"
+    },
+    {
+      "path": "build/v7/CoffeeMachine.ino.elf",
+      "bytes": 2060020,
+      "sha256": "857418f67425f26e0c8c7cce6582e5e6b0a95cb2db509767221b9b67d75f2e26"
+    },
+    {
+      "path": "build/v7/CoffeeMachine.ino.map",
+      "bytes": 1795284,
+      "sha256": "0e00a79d993f9b57f03029ac1b16c93e9272ff924fc61d440a82eb33defb97a0"
+    }
+  ]
+}

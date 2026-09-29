@@ -1,0 +1,16 @@
+# Python / tooling
+.ruff_cache/
+__pycache__/
+
+# Arduino build outputs
+build/
+*.bin
+*.elf
+*.hex
+*.map
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~

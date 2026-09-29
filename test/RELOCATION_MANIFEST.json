@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-30",
+  "files": [
+    {
+      "old": "DisplayDigitTest/DisplayDigitTest.ino",
+      "new": "test/DisplayDigitTest/DisplayDigitTest.ino",
+      "sha256": "8da83e749132411a0ba9ce0a4503c2e2ecb9edd1ec5ff4a2fb34f54c0b496844"
+    },
+    {
+      "old": "Flowmeter_Test/Flowmeter_Test.ino",
+      "new": "test/Flowmeter_Test/Flowmeter_Test.ino",
+      "sha256": "6c60198cdadf79d125788b4086a9e206090a4aa63ab4aeee490b3bb827df2b4f"
+    },
+    {
+      "old": "NtcTempMonitor/NtcTempMonitor.ino",
+      "new": "test/NtcTempMonitor/NtcTempMonitor.ino",
+      "sha256": "2b3a95d083c38f9e39cc06a7f51e1433bb1d6474de4134a1c6388eac6f5be00a"
+    },
+    {
+      "old": "TM1637Blink888/TM1637Blink888.ino",
+      "new": "test/TM1637Blink888/TM1637Blink888.ino",
+      "sha256": "e8c9564f6ce36d5e5df426a8fd7a916695c77b552b94379def854b4a33264c57"
+    },
+    {
+      "old": "TM1637Test/TM1637Test.ino",
+      "new": "test/TM1637Test/TM1637Test.ino",
+      "sha256": "0676ad77b58f0262430ce29909d28d3a8a14937db14c8789bcd72455b89e75b0"
+    },
+    {
+      "old": "Test_4x7Seg/Test_4x7Seg.ino",
+      "new": "test/Test_4x7Seg/Test_4x7Seg.ino",
+      "sha256": "2ddb53c4941e7ca053244f9c26b4fd54f46ff2bc0b335affe60a81c7a9637597"
+    },
+    {
+      "old": "4X 7 Segment.txt",
+      "new": "test/4X 7 Segment.txt",
+      "sha256": "0598cb1ae0a7b5ccbf87ea7202c57386a553157558b4dbacb9499726c5aa292f"
+    },
+    {
+      "old": "NTC_Temperature.txt",
+      "new": "test/NTC_Temperature.txt",
+      "sha256": "49f8ed310cdc7bb52e4d577ab9a4045154b3a9eb345249502b90b84d3211858e"
+    }
+  ]
+}

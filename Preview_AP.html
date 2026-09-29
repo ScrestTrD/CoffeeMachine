@@ -1,0 +1,55 @@
+
+<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coffee Machine</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f6f6f5;color:#1b1b1d;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+.top{background:#1a130e;color:#fff;padding:1.4rem 1.25rem}
+.brand{font-size:.72rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#e7e1db}
+.name{font-size:1.5rem;font-weight:650;margin:.15rem 0 0}
+.name:after{content:"";display:block;width:2.4rem;height:3px;background:#c06b30;margin-top:.5rem;border-radius:2px}
+main{max-width:540px;margin:0 auto;padding:1.2rem 1rem 3rem}
+.card{background:#fff;border:1px solid #e6e6e4;border-radius:14px;padding:1.2rem 1.1rem;margin:0 0 1rem;box-shadow:0 1px 2px rgba(23,20,16,.04)}
+h2{font-size:.78rem;font-weight:650;letter-spacing:.14em;text-transform:uppercase;color:#241a13;margin:0 0 1rem}
+label{display:block;font-size:.8rem;font-weight:550;color:#3a382f;margin:0 0 .35rem}
+input{width:100%;padding:.7rem .8rem;border:1px solid #dcdcda;border-radius:10px;font-size:1rem;background:#fdfdfc;color:#1b1b1d}
+input:focus{outline:none;border-color:#c06b30;box-shadow:0 0 0 3px rgba(192,107,48,.14)}
+.hint{font-size:.76rem;color:#5f5f62;margin:.5rem 0 0}
+button{display:block;width:100%;padding:.75rem 1rem;border-radius:10px;font-size:.9rem;font-weight:600;cursor:pointer;margin:.65rem 0 0;transition:transform .06s ease,background .15s ease,border-color .15s ease}
+button:active{transform:translateY(1px) scale(.995)}
+.primary{background:#241a13;color:#fff;border:1px solid #241a13}
+.primary:hover{background:#3a2a20;border-color:#3a2a20}
+.ghost{background:#fff;color:#3a382f;border:1px solid #dcdcda}
+.ghost:hover{background:#f8f7f6;border-color:#c6c4c0}
+.row{display:flex;justify-content:space-between;align-items:baseline;padding:.55rem 0;border-bottom:1px solid #eceae7}
+.row:last-child{border-bottom:none}
+.row span{color:#5f5f62;font-size:.82rem}
+.row b{font-size:.95rem;font-weight:550}
+.mono{font-family:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace}
+footer{max-width:540px;margin:0 auto;padding:0 1rem 2.5rem;color:#8a8a8d;font-size:.7rem;text-align:center}
+</style></head><body>
+<div class="top"><div class="brand">Coffee Machine</div><div class="name">Cài đặt &amp; hiệu chuẩn</div></div>
+<main>
+<section class="card">
+<h2>Nồi hơi &mdash; Boiler</h2>
+<form method="POST" action="/save">
+<label for="sp">Nhiệt độ đặt (°C)</label>
+<input id="sp" type="number" step="0.5" min="90" max="100" value="97.5" name="setpoint" required>
+<p class="hint">Cho phép 90.0 - 100.0 °C · bước 0.5 °C</p>
+<button class="primary" type="submit">Lưu nhiệt độ đặt</button>
+</form>
+</section>
+<section class="card">
+<h2>Cảm biến NTC</h2>
+<div class="row"><span>Điện trở R0 (25 °C)</span><b class="mono">100000 ohm</b></div>
+<div class="row"><span>Hệ số Beta</span><b class="mono">3950 K</b></div>
+<p class="hint">Hiệu chuẩn 2 điểm: nhúng cảm biến vào nước đá (0 °C) rồi nước sôi (100 °C).</p>
+<form method="POST" action="/calcold"><button class="ghost" type="submit">Ghi điểm 0 °C (đóng băng)</button></form>
+<form method="POST" action="/calhot"><button class="ghost" type="submit">Ghi điểm 100 °C (sôi)</button></form>
+<form method="POST" action="/calapply"><button class="primary" type="submit">Áp dụng hiệu chuẩn</button></form>
+<form method="POST" action="/calreset"><button class="ghost" type="submit">Về mặc định</button></form>
+</section>
+</main>
+<footer>Coffee Machine · NodeMCU · WiFi AP</footer>
+</body></html>

@@ -1,0 +1,38 @@
+{
+  "timestampUTC": "2026-09-30T10:28:03.457421+00:00",
+  "firmwareSha256": "001f5701e5f792207db7a8168d6778c3fd329cad4bebb05fe7aa7e5011764abf",
+  "fqbn": "esp8266:esp8266:nodemcuv2",
+  "uploadPerformed": false,
+  "status": "PASS",
+  "toolchain": {
+    "cli": {
+      "exit": 0,
+      "stdout": "arduino-cli  Version: 1.5.2-rc.1 Commit: fef6e48df Date: 2026-07-23T11:13:39Z\n",
+      "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n"
+    },
+    "cores": {
+      "exit": 0,
+      "stdout": "ID              Installed Latest Name\nesp8266:esp8266 3.1.2     3.1.2  esp8266\n\n",
+      "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n"
+    },
+    "libraries": {
+      "exit": 0,
+      "stdout": "Name                 Installed     Available         Location Description\nShiftRegister74HC595 1.3.1         -                 user     -\n\n",
+      "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n"
+    }
+  },
+  "buildDirectory": "/tmp/coffee-arduino-7ypjoebg/build",
+  "compile": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:54: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:73: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n. Variables and constants in RAM (global, static), used 28652 / 80192 bytes (35%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ DATA     1496     initialized variables\n╠══ RODATA   948      constants       \n╚══ BSS      26208    zeroed variables\n. Instruction RAM (IRAM_ATTR, ICACHE_RAM_ATTR), used 60051 / 65536 bytes (91%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ ICACHE   32768    reserved space for flash instruction cache\n╚══ IRAM     27283    code in IRAM    \n. Code in flash (default, ICACHE_FLASH_ATTR), used 241368 / 1048576 bytes (23%)\n║   SEGMENT  BYTES    DESCRIPTION\n╚══ IROM     241368   code in flash   \n"
+  },
+  "elfSha256": "857418f67425f26e0c8c7cce6582e5e6b0a95cb2db509767221b9b67d75f2e26",
+  "isrSymbolCheck": {
+    "exit": 0,
+    "symbols": [
+      "401000f0  w    F .text1\t00000018 _ZN10FlowSensor7flowIsrEv"
+    ],
+    "iramAddress": true
+  }
+}

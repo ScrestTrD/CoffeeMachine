@@ -1,0 +1,124 @@
+/*
+  4x7SEG — NodeMCU ESP8266 + 0.56" 4-digit 7-segment + 4x74HC595 (3-wire)
+  Mỗi số có 1 con 74HC595 riêng (4 chip nối tiếp) -> hiển thị TĨNH, không cần quét.
+  Wing: hardware | Topic: esp8266-74hc595-7seg | Updated: 2026-09-02
+  Thư viện: https://github.com/Simsso/ShiftRegister74HC595 (Timo Denk)
+
+  =========== WIRING (NodeMCU -> module) ===========
+    D2 (GPIO4) -> SDI   (data in)
+    D3 (GPIO0) -> SCLK  (shift clock)
+    D4 (GPIO2) -> LOAD  (latch / LCK)
+    3V3        -> VCC+
+    GND        -> GND-
+  ===================================================
+
+  Cách hoạt động:
+  Mỗi số = 1 chip 74HC595 giữ 8 segment (A-G + DP) của riêng nó. Gửi 4 byte là
+  hiển thị cả 4 số cùng lúc (tĩnh). Thư viện shift byte[3] TRƯỚC -> chip xa,
+  byte[0] SAU -> chip gần. Theo quy ước module 4-chip (right-to-left):
+      byte[0] = số trái nhất (hàng nghìn)
+      byte[1] = hàng trăm
+      byte[2] = hàng chục
+      byte[3] = số phải nhất (hàng đơn vị)
+  Segment (thư viện MSBFIRST -> bit0=Q0=A ... bit6=G, bit7=DP), active HIGH (common cathode).
+*/
+
+#include <ShiftRegister74HC595.h>
+
+// ------------------- PIN ASSIGNMENTS -------------------
+#define SDI   D2   // serial data  (GPIO4)
+#define SCLK  D3   // shift clock  (GPIO0)
+#define LOAD  D4   // latch        (GPIO2)
+
+// 4 chip 74HC595 nối tiếp (mỗi số 1 chip)
+ShiftRegister74HC595<4> sr(SDI, SCLK, LOAD);
+
+// Loại led. 1 = common-cathode (mặc định). Đổi 0 nếu module là common-anode.
+#define COMMON_CATHODE 1
+
+// Bật số 0 ở đầu? 1 = hiện '0012', 0 = hiện '  12'.
+#define SHOW_LEADING_ZERO 1
+
+// 1 nếu số hiện bị đảo phải-trái (vd hiện '4321' thay vì '1234').
+#define REVERSE_DIGITS 0
+
+// Mã segment 0..9, bit: bit0=A bit1=B bit2=C bit3=D bit4=E bit5=F bit6=G bit7=DP.
+// (active HIGH, đúng cho thư viện dùng MSBFIRST)
+const uint8_t segCode[10] = {
+  0x3F, 0x06, 0x5B, 0x4F, 0x66,   // 0 1 2 3 4
+  0x6D, 0x7D, 0x07, 0x7F, 0x6F    // 5 6 7 8 9
+};
+
+// ------------------- DRIVER -------------------
+
+// Hiển thị số 0..9999 lên 4 số.
+//   dpMask: bit0=DP cho số trái nhất, bit1=hàng trăm, bit2=hàng chục, bit3=hàng đơn vị.
+void displayNumber(uint16_t value, uint8_t dpMask) {
+  // 4 byte: [0]=nghìn(trái), [1]=trăm, [2]=chục, [3]=đơn vị(phải)
+  uint8_t vals[4];
+  vals[0] = segCode[(value / 1000) % 10];
+  vals[1] = segCode[(value / 100) % 10];
+  vals[2] = segCode[(value / 10) % 10];
+  vals[3] = segCode[value % 10];
+
+  // Ẩn số 0 ở đầu (leading zero)
+  if (SHOW_LEADING_ZERO == 0) {
+    if (value < 1000) vals[0] = 0x00;
+    if (value < 100)  vals[1] = 0x00;
+    if (value < 10)   vals[2] = 0x00;
+  }
+
+  // Gắn decimal point (bit7 = DP)
+  if (dpMask & 0x01) vals[0] |= 0x80;
+  if (dpMask & 0x02) vals[1] |= 0x80;
+  if (dpMask & 0x04) vals[2] |= 0x80;
+  if (dpMask & 0x08) vals[3] |= 0x80;
+
+  // Đảo phải-trái nếu module nối ngược
+#if REVERSE_DIGITS
+  { uint8_t t; t = vals[0]; vals[0] = vals[3]; vals[3] = t; t = vals[1]; vals[1] = vals[2]; vals[2] = t; }
+#endif
+
+  // Đảo segment nếu common-anode
+#if COMMON_CATHODE == 1
+  for (int i = 0; i < 4; i++) vals[i] = ~vals[i] & 0xFF;
+#endif
+
+  // Gửi 4 byte + latch 1 lần (cập nhật cùng lúc, không bóng ma)
+  sr.setAll(vals);
+}
+
+// ------------------- SETUP -------------------
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n4x7SEG ready — NodeMCU + 4x74HC595");
+
+  // TEST 1: sáng TOÀN BỘ segment mọi số (8888) ~0.6s -> kiểm tra dây segment từng chip
+  uint8_t all[4] = {0x7F, 0x7F, 0x7F, 0x7F};   // A-G, không DP
+  sr.setAll(all);
+  delay(600);
+
+  // TEST 2: hiện "1234" -> kiểm tra THỨ TỰ số trái-phải
+  displayNumber(1234, 0);
+  delay(600);
+
+  // TEST 3: "5.6.7.8" (bật DP) ~0.6s -> kiểm tra decimal point
+  displayNumber(5678, 0x0F);
+  delay(600);
+
+  all[0] = all[1] = all[2] = all[3] = 0x00;     // tắt hết
+  sr.setAll(all);
+}
+
+// ------------------- LOOP -------------------
+uint16_t value = 0;
+unsigned long lastInc = 0;
+
+void loop() {
+  displayNumber(value, 0);       // hiển thị giá trị hiện tại (tĩnh)
+
+  if (millis() - lastInc >= 250) {   // tăng bộ đếm mỗi 250ms, 0000..9999
+    lastInc = millis();
+    value = (value + 1) % 10000;
+  }
+}

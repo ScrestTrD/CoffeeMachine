@@ -1,0 +1,170 @@
+/*
+  NTC_Temperature — ESP8266 NodeMCU + NTC 100k thermistor on A0
+  Wing: hardware | Topic: esp8266-ntc-thermistor | Updated: 2026-09-02
+
+  ============ CIRCUIT ============
+      3V3 ── R_SERIES ──┬── A0 (NodeMCU)
+                        │
+                        NTC (100k @ 25°C)
+                        │
+                       GND
+
+  NTC nối từ A0 xuống GND (leg dưới). R_SERIES = 10k nối 3V3 -> A0 để tạo cầu chia.
+  Nếu NTC đấu phía trên (3V3→NTC→A0) -> đổi `#define NTC_ON_BOTTOM 0` (kèm R_SERIES sang GND).
+
+  NodeMCU A0 có cầu chia 100k:220k -> đọc 0..3.3V:  voltage = analogRead(A0)*3.3/1023
+
+  ========== HIỆU CHUẨN TỰ ĐỘNG 2 ĐIỂM (khuyên dùng) ==========
+  Không cần biết giá trị Beta. Trong Serial Monitor @115200, nhập lệnh + Enter:
+    'c'  -> đọc điện trở NTC khi nhúng vào nước đá (0°C)      [chạm cái trước]
+    'h'  -> đọc điện trở NTC khi nhúng vào nước sôi (100°C)   [chạm h sau]
+    'x'  -> tính & áp dụng Beta (B) và R0 mới
+    'p'  -> in lại các tham số đang dùng
+    'r'  -> trả về mặc định (B=3950)
+  Sau khi 'c' và 'h' xong rồi 'x', số đo sẽ chuẩn theo chính con NTC của Anh.
+  ============================================================
+*/
+
+const int NTC_PIN = A0;          // ESP8266 analog input
+const float VCC     = 3.3;         // rail cấp cho cầu chia
+const float ADC_FS  = 3.3;         // NodeMCU A0 full-scale (0-3.3V)
+
+// --- Thông số mạch (đã chốt) ---
+const float R_SERIES     = 10000.0; // 10k nối 3V3 -> A0
+const bool  NTC_ON_BOTTOM = true;   // NTC từ A0 xuống GND
+
+// --- Thông số NTC (mặc định; có thể bị calib ghi đè) ---
+float NTC_R0 = 100000.0;   // điện trở tại 25°C
+float NTC_B  = 3950.0;     // Beta (bản 100k phổ thông là 3950)
+const float NTC_T0 = 298.15; // 25°C = 273.15 + 25 (Kelvin)
+
+// Hiệu chuẩn điện trở: 1.0 = không chỉnh. Nếu R đọc lệch X% so với thật:
+//   đọc cao 5% -> 0.95 ; đọc thấp 5% -> 1.05
+const float R_SCALE = 1.0;
+
+// --- Trạng thái hiệu chuẩn ---
+bool  calibColdDone = false, calibHotDone = false;
+float calibR0 = NAN, calibR100 = NAN;
+char  serBuf[24]; int serIdx = 0;
+
+// ------------------- HELPERS -------------------
+
+// Tính điện trở NTC (ohm) từ raw ADC đã đọc
+float measureResistance(int raw) {
+  float v   = raw * (ADC_FS / 1023.0);
+  float r   = NAN;
+  if (v > 0.02 && v < ADC_FS - 0.02) {
+    if (NTC_ON_BOTTOM) r = R_SERIES * v / (VCC - v);          // R = R_SERIES*v/(VCC-v)
+    else               r = R_SERIES * (VCC - v) / v;           // R = R_SERIES*(VCC-v)/v
+    r *= R_SCALE;
+  }
+  return r;
+}
+
+// Điện trở -> nhiệt độ (°C) qua Beta
+float resistanceToTempC(float r) {
+  if (!(r > 0.0) || r >= 1.0e9) return NAN;
+  float invT = 1.0 / NTC_T0 + (1.0 / NTC_B) * log(r / NTC_R0);
+  return (1.0 / invT) - 273.15;
+}
+
+// ------------------- SETUP -------------------
+void setup() {
+  Serial.begin(115200);
+  delay(100);
+  Serial.println("NTC 100k thermistor — NodeMCU A0 (0-3.3V)");
+  Serial.println("Chuan lonh: 'c'=nuoc da(0C)  'h'=nuoc soi(100C)  'x'=ap dung  'p'=params  'r'=reset");
+  Serial.println();
+  Serial.println("Raw |  Volts(V) |  R(ohm)  |  T(C) |  T(F)   (go 'p' xem B/R0 hien tai)");
+}
+
+// ------------------- LOOP -------------------
+void loop() {
+  // Đọc ADC một lần, tính điện áp + điện trở + nhiệt độ
+  int raw = analogRead(NTC_PIN);
+  float v = raw * (ADC_FS / 1023.0);
+  float r = measureResistance(raw);
+  float tC = resistanceToTempC(r);
+  float tF = tC * 9.0 / 5.0 + 32.0;
+
+  Serial.print(raw);
+  Serial.print(" | ");
+  Serial.print(v, 3);
+  Serial.print(" | ");
+  if (isnan(r)) Serial.print("  ---  ");
+  else          Serial.print(r, 0);
+  Serial.print(" | ");
+  if (isnan(tC)) Serial.print("--err--");
+  else { Serial.print(tC, 1); Serial.print(" | "); Serial.print(tF, 1); }
+  Serial.println();
+
+  // Xử lý lệnh hiệu chuẩn từ Serial
+  handleSerial();
+
+  delay(500);
+}
+
+// Đọc lệnh từ Serial (dòng kết thúc bằng Enter)
+void handleSerial() {
+  while (Serial.available() > 0) {
+    char ch = Serial.read();
+    if (ch == '\n' || ch == '\r') {
+      if (serIdx > 0) {
+        serBuf[serIdx] = 0;
+        serIdx = 0;
+        processCommand();
+      }
+      if (ch == '\n') break;
+    } else if (serIdx < (int)sizeof(serBuf) - 1) {
+      serBuf[serIdx++] = ch;
+    }
+  }
+}
+
+void processCommand() {
+  char cmd = serBuf[0];
+  if (cmd == 'c' || cmd == 'C') {
+    calibR0 = measureResistance(analogRead(NTC_PIN)); calibColdDone = true;
+
+    Serial.print("Recorded 0C point: R = ");
+    if (isnan(calibR0)) Serial.println("? (may not be in range)");
+    else Serial.println(calibR0, 0);
+  }
+  else if (cmd == 'h' || cmd == 'H') {
+    calibR100 = measureResistance(analogRead(NTC_PIN)); calibHotDone = true;
+    Serial.print("Recorded 100C point: R = ");
+    if (isnan(calibR100)) Serial.println("?");
+    else Serial.println(calibR100, 0);
+  }
+  else if (cmd == 'x' || cmd == 'X') {
+    if (calibColdDone && calibHotDone && !isnan(calibR0) && !isnan(calibR100)
+        && calibR0 > calibR100 && calibR0 > 1 && calibR100 > 1) {
+      // T1=0C(273.15K), T2=100C(373.15K)
+      float T1 = 273.15, T2 = 373.15;
+      NTC_B = (log(calibR100) - log(calibR0)) / (1.0 / T2 - 1.0 / T1);   // B = ln(R2/R1)/(1/T2-1/T1)
+      NTC_R0 = calibR0 * exp(-1.0 * NTC_B * (1.0 / T1 - 1.0 / NTC_T0));  // R0 = R1*e^(-B*(1/T1-1/T0))
+      Serial.println("Applied calibration:");
+      Serial.print("  B  = "); Serial.println(NTC_B, 1);
+      Serial.print("  R0 = "); Serial.println(NTC_R0, 0);
+      if (NTC_B > 800 && NTC_B < 6000) {
+        Serial.println("OK. (B trong khoang 800..6000) So do se chuan.");
+      } else {
+        Serial.println("Canh bao: B ngoai khoang hop le -> kiem tra cac diem 0C/100C da dung chua.");
+      }
+    } else {
+      Serial.println("Chua du du lieu. Nhap 'c' (nuoc da 0C) roi 'h' (nuoc soi 100C) truoc.");
+    }
+  }
+  else if (cmd == 'p' || cmd == 'P') {
+    Serial.print("Params  R_SERIES="); Serial.print(R_SERIES, 0);
+    Serial.print("  B="); Serial.print(NTC_B, 1);
+    Serial.print("  R0="); Serial.print(NTC_R0, 0);
+    Serial.print("  R_SCALE="); Serial.println(R_SCALE);
+  }
+  else if (cmd == 'r' || cmd == 'R') {
+    NTC_B = 3950.0; NTC_R0 = 100000.0;
+    calibColdDone = calibHotDone = false;
+    calibR0 = calibR100 = NAN;
+    Serial.println("Reset ve mac dinh B=3950, R0=100k.");
+  }
+}
