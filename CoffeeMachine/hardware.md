@@ -1,6 +1,6 @@
-# Hardware — CoffeeMachine v14
+# Hardware — CoffeeMachine v15
 
-Board NodeMCU ESP8266. Pin map mô tả source và quyết định wiring được ghi trước đây; chưa có phép đo phần cứng mới trong lượt sửa v14. Xem [bench G10](../docs/BENCH_TEST_PLAN.md).
+Board NodeMCU ESP8266. Pin map mô tả source và quyết định wiring được ghi trước đây; chưa có phép đo phần cứng mới trong lượt sửa v15. Xem [bench G10](../docs/BENCH_TEST_PLAN.md).
 
 ## Pin map
 
@@ -33,8 +33,13 @@ Không dùng GPIO6–11 (flash). Không đổi D8 sang INPUT_PULLUP hoặc giữ
 - Flowmeter không quyết định liều, không có no-flow abort. Xác minh output điện (không đưa 5V push-pull vào GPIO).
 - GPIO1/3 dùng LED nên production không Serial.begin(). USB-UART có thể chọi RX; tách UART/LED đúng khi service. Test Serial không phải chế độ vận hành máy.
 
-Heater1400W theo chủ máy cung cấp ngày2026-10-01; chưa đo công suất/độ trễ NTC/overshoot trong lượt này. Hồi nhiệt v14 theo NTC sau lọc tới setpoint, không dự đoán nhiệt tích trữ.
+Heater1400W theo chủ máy cung cấp ngày2026-10-01; chưa đo công suất/độ trễ NTC/overshoot trong lượt này. Hồi nhiệt v15 theo NTC sau lọc tới setpoint, không dự đoán nhiệt tích trữ.
 
 ## Kiểm chứng
 
 [G09](../docs/QA_STATUS.md) đã compile/link với core 3.1.2 và kiểm tra ISR IRAM. G10 chưa đo wiring, nguồn, SSR trigger, calibration, overshoot, hydraulic hoặc power-loss; không coi source defaults là số đo mới.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

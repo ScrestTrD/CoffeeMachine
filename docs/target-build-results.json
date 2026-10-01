@@ -1,6 +1,6 @@
 {
-  "timestampUTC": "2026-10-01T01:36:39.459267+00:00",
-  "firmwareSha256": "934afe590319bb7dd719405fc71697a37a9b4525ccc20e382882576b756f44f4",
+  "timestampUTC": "2026-10-01T04:35:24.061350+00:00",
+  "firmwareSha256": "4ee3a98d21a08bb31d9a94fcc322a0c35dd8201e39c600f244638c317ac3533d",
   "fqbn": "esp8266:esp8266:nodemcuv2",
   "uploadPerformed": false,
   "status": "PASS",
@@ -21,13 +21,13 @@
       "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n"
     }
   },
-  "buildDirectory": "/mnt/pc-dev/CoffeMachine/build/v14",
+  "buildDirectory": "/mnt/pc-dev/CoffeMachine/build/v15",
   "compile": {
     "exit": 0,
     "stdout": "",
-    "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:54: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:73: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n. Variables and constants in RAM (global, static), used 28668 / 80192 bytes (35%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ DATA     1496     initialized variables\n╠══ RODATA   948      constants       \n╚══ BSS      26224    zeroed variables\n. Instruction RAM (IRAM_ATTR, ICACHE_RAM_ATTR), used 60051 / 65536 bytes (91%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ ICACHE   32768    reserved space for flash instruction cache\n╚══ IRAM     27283    code in IRAM    \n. Code in flash (default, ICACHE_FLASH_ATTR), used 241720 / 1048576 bytes (23%)\n║   SEGMENT  BYTES    DESCRIPTION\n╚══ IROM     241720   code in flash   \n"
+    "stderr": "Unable to get user home dir: $HOME is not defined\nUnable to get user home dir: $HOME is not defined\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:54: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n/tmp/coffee-arduino-7ypjoebg/data/packages/esp8266/hardware/esp8266/3.1.2/tools/elf2bin.py:73: SyntaxWarning: invalid escape sequence '\\s'\n  words = re.split('\\s+', line)\n. Variables and constants in RAM (global, static), used 28676 / 80192 bytes (35%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ DATA     1496     initialized variables\n╠══ RODATA   948      constants       \n╚══ BSS      26232    zeroed variables\n. Instruction RAM (IRAM_ATTR, ICACHE_RAM_ATTR), used 60051 / 65536 bytes (91%)\n║   SEGMENT  BYTES    DESCRIPTION\n╠══ ICACHE   32768    reserved space for flash instruction cache\n╚══ IRAM     27283    code in IRAM    \n. Code in flash (default, ICACHE_FLASH_ATTR), used 241848 / 1048576 bytes (23%)\n║   SEGMENT  BYTES    DESCRIPTION\n╚══ IROM     241848   code in flash   \n"
   },
-  "elfSha256": "f3bd8b3c28d5e5297ab6aa9373f40574f45399f4ad38a18759c79653ecac0bf7",
+  "elfSha256": "f0542ea0cf06c150a62ababb18378c29107ea05d21a73cecd9f26aa7fa7e5da1",
   "isrSymbolCheck": {
     "exit": 0,
     "symbols": [

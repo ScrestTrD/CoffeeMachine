@@ -1,6 +1,6 @@
 # CoffeeMachine — đặc tả hiện hành
 
-Cập nhật 2026-10-01. Source v14 đã triển khai; trạng thái thực hiện và kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md). Tài liệu này thay đặc tả trộn PID/xung/AP cũ; [audit v6](CODE_REVIEW_2026-09-30.md) giữ lịch sử findings.
+Cập nhật 2026-10-01. Source v15 đã triển khai; trạng thái thực hiện và kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md). Tài liệu này thay đặc tả trộn PID/xung/AP cũ; [audit v6](CODE_REVIEW_2026-09-30.md) giữ lịch sử findings.
 
 ## Hardware
 
@@ -66,3 +66,8 @@ Fault không tự clear khi UI đổi. Quá nhiệt >145°C là cắt SSR tự h
 ## Gates
 
 [G01–G08](docs/QA_GATES.md) kiểm chứng logic bằng host mocks. G09 compile/link thật với ESP8266, kiểm tra IRAM; G10 đo wiring/reset, sensor, hydraulic, heater/overshoot/fuse, persistence/power loss. Không đóng G09/G10 bằng host test. Các sketch linh kiện trong test/ không tự tắt đầy đủ actuator và không phải firmware vận hành.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

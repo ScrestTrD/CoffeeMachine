@@ -1,6 +1,6 @@
 # CoffeeMachine — hướng dẫn vận hành
 
-Tài liệu theo source v14 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Source và firmware đang chạy là hai trạng thái cần xác minh riêng. [QA_STATUS](docs/QA_STATUS.md) ghi bằng chứng đã có.
+Tài liệu theo source v15 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Source và firmware đang chạy là hai trạng thái cần xác minh riêng. [QA_STATUS](docs/QA_STATUS.md) ghi bằng chứng đã có.
 
 ## Thao tác nhanh
 
@@ -13,7 +13,7 @@ Tài liệu theo source v14 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/Coff
 | Xả | SET nhấn-nhả ≤700ms; dừng bằng SET nhấn-nhả 100ms–<3s; tự dừng 60s |
 | Chỉnh nhiệt | SET+RUN 5s rồi nhả → RUN +1/SET −1°C → giữ cả hai 300ms lưu; timeout 20s hủy |
 
-BOOT_SAFE hiện 14; prime/đun hiện 8888 nháy; READY hiện 0000/RUN steady và tính lại theo nhiệt. Dosing được phép từ heating idle, nên chờ READY nếu cần nhiệt ổn định.
+BOOT_SAFE hiện 15; prime/đun hiện 8888 nháy; READY hiện 0000/RUN steady và tính lại theo nhiệt. Dosing được phép từ heating idle, nên chờ READY nếu cần nhiệt ổn định.
 
 ## Đun trong pha và hồi nhiệt
 
@@ -37,3 +37,8 @@ E1 NTC invalid, E3 timeout mẫu 2s, E6 storage init/save thất bại, E8 FSM s
 - Wiring/fuse/SSR/NTC đa điểm/power-loss cần các [gate hardware](docs/QA_GATES.md); lượt này không nạp chip hoặc chạy máy.
 
 [Hướng dẫn chi tiết](CoffeeMachine/instruction.md).
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

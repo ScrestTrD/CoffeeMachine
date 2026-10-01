@@ -1,22 +1,22 @@
 {
-  "timestampUTC": "2026-10-01T01:39:01.545315+00:00",
-  "firmwareSourceSha256": "934afe590319bb7dd719405fc71697a37a9b4525ccc20e382882576b756f44f4",
+  "timestampUTC": "2026-10-01T04:36:47.155781+00:00",
+  "firmwareSourceSha256": "4ee3a98d21a08bb31d9a94fcc322a0c35dd8201e39c600f244638c317ac3533d",
   "uploadPerformed": false,
   "artifacts": [
     {
-      "path": "build/v14/CoffeeMachine.ino.bin",
-      "sha256": "9a1380893fcb4a80f94c2124e973be0615f6e54fd0469f1045058d5fccdf86e1",
-      "bytes": 275600
+      "path": "build/v15/CoffeeMachine.ino.bin",
+      "sha256": "40cf137f96d1b60661227230831597dcf5611e39591c14ee66833a8159a0fb18",
+      "bytes": 275728
     },
     {
-      "path": "build/v14/CoffeeMachine.ino.elf",
-      "sha256": "f3bd8b3c28d5e5297ab6aa9373f40574f45399f4ad38a18759c79653ecac0bf7",
-      "bytes": 2063316
+      "path": "build/v15/CoffeeMachine.ino.elf",
+      "sha256": "f0542ea0cf06c150a62ababb18378c29107ea05d21a73cecd9f26aa7fa7e5da1",
+      "bytes": 2064164
     },
     {
-      "path": "build/v14/CoffeeMachine.ino.map",
-      "sha256": "9427b63815a3d2cbb31bc40c7d0a74b8dfa8559edbf2203f5fc70431ba25fd12",
-      "bytes": 1797681
+      "path": "build/v15/CoffeeMachine.ino.map",
+      "sha256": "75a87fae52a25d552738dcb941cb08ba0ec96cdb95cadf77fe76de6465ac9e00",
+      "bytes": 1797446
     }
   ]
 }

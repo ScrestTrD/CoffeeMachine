@@ -1,4 +1,4 @@
-# Logic firmware v14
+# Logic firmware v15
 
 Đặc tả hành vi sửa; trạng thái kiểm chứng: [QA_STATUS](../docs/QA_STATUS.md).
 
@@ -28,3 +28,8 @@ Save trả kết quả commit; failure latch E6 trước khi báo hoàn tất. K
 ## Verification
 
 Findings CM-001…007 và gates G01…10 được map tại [QA_GATES](../docs/QA_GATES.md). [Audit v6](../CODE_REVIEW_2026-09-30.md) là snapshot lỗi trước sửa; không phải trạng thái source mới.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

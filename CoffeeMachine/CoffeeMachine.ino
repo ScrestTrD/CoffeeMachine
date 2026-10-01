@@ -48,7 +48,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 14;
+static const uint8_t FW_VERSION = 15;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -89,6 +89,9 @@ constexpr float SETPOINT_STEP_C = 0.5f;   // constexpr: needed by the step asser
 // No PWM, no time-proportional window.
 const float THERMOSTAT_HYSTERESIS_C = 1.0f;
 const uint32_t RECOVERY_STABLE_MS = 3000; // observation only, never forced heat
+const float RECOVERY_MAX_SWING_C = 0.10f; // entire confirmation-window range
+const float RECOVERY_MAX_DROP_C = 0.05f;  // fall from peak restarts confirmation
+// Software noise tolerances; validate against the physical sensor on the bench.
 const float READY_BAND_C         = 2.0f;    // ready threshold below setpoint
 
 // --- NTC measurement (COFFE_README section 4) ---
@@ -900,6 +903,7 @@ class CoffeeMachine {
     bool recoveryStable_ = false;
     uint32_t recoveryStableSince_ = 0, recoverySampleMs_ = 0;
     float recoverySetpoint_ = DEFAULT_SETPOINT_C;
+    float recoveryMinT_ = 0.0f, recoveryMaxT_ = 0.0f;
 
     static bool brewingState(FsmState s) {
       return s == RUN_PUMP_PREDELAY || s == RUN_ACTIVE ||
@@ -939,9 +943,17 @@ class CoffeeMachine {
             recoveryStable_ = false;
           recoverySampleMs_ = sampleMs;
           if (temp >= sp && temp <= sp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
+            if (recoveryStable_) {
+              if (temp < recoveryMinT_) recoveryMinT_ = temp;
+              if (temp > recoveryMaxT_) recoveryMaxT_ = temp;
+              if (recoveryMaxT_ - recoveryMinT_ > RECOVERY_MAX_SWING_C ||
+                  recoveryMaxT_ - temp > RECOVERY_MAX_DROP_C)
+                recoveryStable_ = false;
+            }
             if (!recoveryStable_) {
               recoveryStable_ = true;
               recoveryStableSince_ = sampleMs;
+              recoveryMinT_ = recoveryMaxT_ = temp;
             } else if (uint32_t(sampleMs - recoveryStableSince_) >= RECOVERY_STABLE_MS) {
               recoveringHeat_ = false;
               recoveryStable_ = false;
@@ -1090,8 +1102,9 @@ class CoffeeMachine {
       dispBlink(now);
       // ready check
       if (readyNow(thermostat.getSetpoint())) {
-        enterIdle(READY_IDLE);
-        return;
+        // Same idle UI, different thermal indication: retain held gestures.
+        enterState(READY_IDLE);
+        disp.number(0, true);
       }
       handleIdleGestures(now);
     }
@@ -1141,8 +1154,9 @@ class CoffeeMachine {
 
     void tickReadyIdle(uint32_t now) {
       if (!readyNow(thermostat.getSetpoint())) {
-        enterIdle(HEATING_IDLE);
+        enterState(HEATING_IDLE);
         dispBlink(now);
+        handleIdleGestures(now);
         return;
       }
       // Do NOT show the setpoint/temperature here (Anh wants it hidden). Idle
@@ -1175,6 +1189,10 @@ class CoffeeMachine {
         float v = pers.clampSetpoint(editSetpoint);   // bounds + 0.5 snap
         if (v != pers.setpointC()) {
           pers.setpointC() = v;
+          thermostat.setSetpoint(v);
+          thermostat.clearHeatRequest();
+          // Flash is synchronous: decide with the new target BEFORE commit.
+          applyHeating();
           if (!pers.save()) {
             latchFault(FAULT_CRC);
             return;
@@ -1195,6 +1213,7 @@ class CoffeeMachine {
         // near-simultaneous press must not also count as +1 / -1.
         while (setBtn.popEvent() != Button::EV_NONE) {}
         while (runBtn.popEvent() != Button::EV_NONE) {}
+        editLastKeyMs = now; // a save gesture is activity, not an abandoned edit
         if (editBothStartMs == 0) editBothStartMs = now;
         if ((now - editBothStartMs) >= SP_EDIT_SAVE_MS) {
           leaveSetpointEdit(true);

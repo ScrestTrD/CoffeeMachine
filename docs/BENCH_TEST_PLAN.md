@@ -1,10 +1,10 @@
-# G10 — bench test plan v14
+# G10 — bench test plan v15
 
 Trạng thái: NOT RUN. Tài liệu chỉ quy định ca test và bằng chứng cần ghi; không điều khiển hoặc nạp thiết bị.
 
 ## Chuẩn bị bằng chứng
 
-Ghi ngày/operator, board, sensor/SSR/relay, sơ đồ thực, firmware binary SHA256 được nạp, source SHA256 và toolchain. Không dùng số 14 lúc boot làm bằng chứng hash binary. Ghi số đo, trace, ảnh wiring và kết quả từng ca; đối chiếu với G01–G09 đã có.
+Ghi ngày/operator, board, sensor/SSR/relay, sơ đồ thực, firmware binary SHA256 được nạp, source SHA256 và toolchain. Không dùng số 15 lúc boot làm bằng chứng hash binary. Ghi số đo, trace, ảnh wiring và kết quả từng ca; đối chiếu với G01–G09 đã có.
 
 ## Các ca
 
@@ -27,3 +27,13 @@ Ghi ngày/operator, board, sensor/SSR/relay, sơ đồ thực, firmware binary S
 G10 chỉ PASS khi các ca có bằng chứng thực và chủ máy xác nhận phần electrical/thermal/hydraulic theo thiết kế. Host assertions không thay những phép đo này. Ngưỡng 145°C và trình tự van đóng lúc prime/press đang giữ theo quyết định source cũ, chưa được lượt này chứng nhận cho cấu hình máy thực.
 
 G10 chưa chạy vì PC không kết nối ESP, theo xác nhận của chủ dự án ngày 2026-09-30. Không có thao tác upload hoặc điều khiển thiết bị trong lượt commit/push.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+
+## Bổ sung v15
+- B14: nhiệt sau pha đang giảm xuyên vùng set..set+0.5; giám sát không thoát nếu range>0.10 hoặc giảm từ peak>0.05. Xác minh noise/tần suất handoff thực.
+- B15: hạ set trong khiSSR đangON; đoD7 trước/trong commit; mô phỏng savefail trên fixture.
+- B16: SET record, SET+RUN edit, SET shortclean đi qua cảhai readiness transitions; thao tác vẫn hoàn tất, release sauSTOP không mởxả.

@@ -1,4 +1,4 @@
-# CoffeeMachine — firmware v14
+# CoffeeMachine — firmware v15
 
 Source controller NodeMCU ESP8266: [CoffeeMachine.ino](CoffeeMachine.ino). Source đã sửa và pass host/target gates G01–G09; xem [QA_STATUS](../docs/QA_STATUS.md) cho trạng thái kiểm chứng.
 
@@ -27,3 +27,8 @@ Kết thúc pha/ghi/hủy/timeout/xả: nhiệt lọc <setpoint thì tiếp tụ
 EEPROM v5 hợp lệ giữ calibration/preset; không tự reset calibration khi defaults source đổi — ngoại lệ một lần v9: lên version 5 để ép defaults mới (R0 185000/Beta 4890) vì giá trị cũ đã biết sai, preset phải ghi lại. Config invalid về defaults; EEPROM init/commit failure latch E6. E1 NTC invalid, E3 timeout, E8 state lạ. Overtemp không latch, chỉ cắt SSR.
 
 [Hardware](hardware.md), [logic](logic.md), [instruction](instruction.md), [spec](../COFFE_README.md), [gates](../docs/QA_GATES.md), [audit baseline v6](../CODE_REVIEW_2026-09-30.md).
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

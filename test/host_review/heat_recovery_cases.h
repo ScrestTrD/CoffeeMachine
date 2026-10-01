@@ -225,3 +225,82 @@
     for(uint32_t dt=0;dt<3000;dt+=100){tickAt(m,start+dt);check(m.recoveringHeat_,"rollover early handoff");}
     tickAt(m,start+3000); check(!m.recoveringHeat_,"rollover blocked handoff");
   });
+
+  test("H20 falling in-band temperatures cannot certify recovery", [&]{
+    for(float drop:{0.49f,0.09f}) {
+      CoffeeMachine m; prepareDose(m,100); tickAt(m,3000);
+      for(uint32_t dt=0;dt<=3000;dt+=100) {
+        const float t=97.99f-drop*float(dt)/3000;
+        sensor(m,t,t); tickAt(m,3100+dt);
+      }
+      check(m.recoveringHeat_,"falling temperature was certified stable");
+      sensor(m,97.2f,97.2f); tickAt(m,6200);
+      check(pins[PIN_SSR]==HIGH,"falling-window handoff delayed reheat");
+    }
+  });
+  test("H21 quiet noisy plateau can return to thermostat", [&]{
+    CoffeeMachine m; prepareDose(m,100); tickAt(m,3000);
+    for(uint32_t dt=0;dt<=3000;dt+=100) {
+      const float t=dt%200?97.68f:97.72f;
+      sensor(m,t,t); tickAt(m,3100+dt);
+    }
+    check(!m.recoveringHeat_&&pins[PIN_SSR]==LOW,"small noise prevented stable handoff");
+  });
+  test("H22 rapidly rising band is not a quiet plateau", [&]{
+    CoffeeMachine m; prepareDose(m,100); tickAt(m,3000);
+    for(uint32_t dt=0;dt<=3000;dt+=100) {
+      const float t=97.55f+0.3f*float(dt)/3000;
+      sensor(m,t,t);tickAt(m,3100+dt);
+    }
+    check(m.recoveringHeat_,"large in-band swing certified stability");
+  });
+  test("H23 lowered setpoint stops heat before flash in both heat modes", [&]{
+    for(bool recovery:{false,true}) {
+      CoffeeMachine m; init(m);sensor(m,97.25f,97.25f);
+      m.thermostat.update(80);m.setActuatorSSR(true);m.state=READY_IDLE;
+      if(recovery){m.state=RUN_ACTIVE;m.enterIdleAfterDose();}
+      m.enterSetpointEdit();m.editSetpoint=95.5f;
+      EEPROM.onCommit=[]{check(pins[PIN_SSR]==LOW,"new setpoint was applied after flash");};
+      m.leaveSetpointEdit(true);m.applyHeating();
+      check(EEPROM.commits==1&&pins[PIN_SSR]==LOW,"lowered setpoint not saved cold");
+    }
+  });
+  test("H24 failure saving changed setpoint still latches E6", [&]{
+    CoffeeMachine m;prepareDose(m,97.25f);tickAt(m,3000);
+    m.enterSetpointEdit();m.editSetpoint=95.5f;EEPROM.commitOk=false;
+    m.leaveSetpointEdit(true);
+    check(m.fault==FAULT_CRC&&allOff(),"setpoint save failure enabled output");
+  });
+  test("H25 save started near edit timeout uses real debounce and wins", [&]{
+    CoffeeMachine m;init(m);sensor(m,100,100);m.state=READY_IDLE;
+    m.enterSetpointEdit();m.editSetpoint=95.5f;
+    pins[PIN_SETB]=LOW;pins[PIN_RUNB]=HIGH;
+    tickAt(m,20850);tickAt(m,20875);tickAt(m,21000);tickAt(m,21175);
+    check(m.pers.setpointC()==95.5f&&EEPROM.commits==1,"timeout discarded active save");
+  });
+  test("H26 SET recording gesture survives both readiness transitions", [&]{
+    for(bool warming:{false,true}) {
+      CoffeeMachine m;init(m);m.state=warming?HEATING_IDLE:READY_IDLE;
+      sensor(m,warming?94.f:96.f,warming?94.f:96.f);pins[PIN_SETB]=LOW;
+      tickAt(m,1100);tickAt(m,1125);tickAt(m,2000);
+      sensor(m,warming?96.f:94.f,warming?96.f:94.f);tickAt(m,2100);
+      tickAt(m,4200);
+      check(m.state==PRESET_SELECT_RECORD,"readiness change discarded record gesture");
+    }
+  });
+  test("H27 SET+RUN edit gesture survives thermal readiness change", [&]{
+    CoffeeMachine m;init(m);m.state=HEATING_IDLE;sensor(m,94,94);
+    pins[PIN_SETB]=LOW;pins[PIN_RUNB]=HIGH;
+    tickAt(m,1100);tickAt(m,1125);
+    sensor(m,96,96);tickAt(m,2100);tickAt(m,6200);
+    pins[PIN_SETB]=HIGH;pins[PIN_RUNB]=LOW;
+    tickAt(m,6300);tickAt(m,6325);
+    check(m.state==SETPOINT_EDIT,"readiness change discarded edit gesture");
+  });
+  test("H28 short clean gesture survives thermal readiness change", [&]{
+    CoffeeMachine m;init(m);m.state=HEATING_IDLE;sensor(m,94,94);
+    pins[PIN_SETB]=LOW;tickAt(m,1100);tickAt(m,1125);
+    sensor(m,96,96);tickAt(m,1200);
+    pins[PIN_SETB]=HIGH;tickAt(m,1300);tickAt(m,1325);
+    check(m.state==CLEAN_FLUSH&&pins[PIN_PUMP]==HIGH,"readiness discarded short SET release");
+  });

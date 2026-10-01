@@ -8,19 +8,19 @@ Firmware chính thức: ../CoffeeMachine/CoffeeMachine.ino. Các test tách riê
 python3 test/run_gates.py --report docs/host-gate-results.json
 ```
 
-Runner compile production source với mock I/O/EEPROM, chạy 105 assertions ở bản thường và AddressSanitizer/UBSan. Compiler flags có -Wall -Wextra -Wpedantic -Werror. Exit 0 = assertions an toàn pass; khác 0 = fail. Không còn semantics “lỗi tái hiện = pass” của reproducer cũ.
+Runner compile production source với mock I/O/EEPROM, chạy 114 assertions ở bản thường và AddressSanitizer/UBSan. Compiler flags có -Wall -Wextra -Wpedantic -Werror. Exit 0 = assertions an toàn pass; khác 0 = fail. Không còn semantics “lỗi tái hiện = pass” của reproducer cũ.
 
 ## Regression nhiệt trên cùng source
 
-Test mới trong host_review/heat_recovery_cases.h được include vào suite production. Bao phủ H01–H19: giám sát 3s, reset ổn định, mẫu cũ/gap, rollover, soak, các exits, filtered setpoint boundary, xoá thermostat latch, cutoff/faults, new cycle/edit/rollover và SSR trước flash commit. Mock EEPROM.onCommit chỉ quan sát trạng thái output tại ranh giới synchronous flash write.
+Test nhiệt trong host_review/heat_recovery_cases.h được include vào suite production. Bao phủ H01–H28: giám sát 3s, reset ổn định, mẫu cũ/gap, rollover, soak, các exits, filtered setpoint boundary, xoá thermostat latch, cutoff/faults, new cycle/edit/rollover và SSR trước flash commit. Mock EEPROM.onCommit chỉ quan sát trạng thái output tại ranh giới synchronous flash write.
 
 Để chạy lại đối chứng snapshot trước sửa (còn trong workspace build, gitignored):
 
 ```sh
-python3 test/run_gates.py --firmware build/v14-pre-monitor.ino --report docs/pre-monitor-reproduction.json
+python3 test/run_gates.py --firmware build/v14-before-hidden-fixes.ino --report docs/v14-hidden-reproduction.json
 ```
 
-Báo cáo v11 101 case/26 fail là lịch sử. Hiện tại chạy105 case; snapshot build/v14-pre-monitor.ino tái hiện lỗi giám sát (exit1), source mới pass (exit0). Host report hash đúng source được chọn bởi --firmware. JSON before/after lưu trong docs; đây là regression sensitivity, không phải phép đo nhiệt thật.
+Báo cáo v11 101 case/26 fail là lịch sử. Hiện tại chạy114 case; snapshot build/v14-before-hidden-fixes.ino tái hiện lỗi giám sát (exit1), source mới pass (exit0). Host report hash đúng source được chọn bởi --firmware. JSON before/after lưu trong docs; đây là regression sensitivity, không phải phép đo nhiệt thật.
 
 --baseline vẫn dành cho5 case lịch sử v6 nếu có snapshot v6 riêng; không dùng cho v11 và không phải gate bắt buộc sau khi lịch sử repository đã squash.
 
@@ -45,9 +45,16 @@ FQBN default esp8266:esp8266:nodemcuv2. Runner không upload; kiểm tra compile
 | TM1637Test/, TM1637Blink888/ | Module TM1637 khác hardware production |
 | 4X 7 Segment.txt | Sketch display tham chiếu gốc |
 | NTC_Temperature.txt | Sketch calibration tham chiếu, defaults100k/no offset |
-| host_review/heat_recovery_cases.h | Contract nhiệt hiện hành H01–H19 |
+| host_review/heat_recovery_cases.h | Contract nhiệt hiện hành H01–H28 |
 | host_review/ | Mock I/O/EEPROM/display và regression suite hiện hành |
 
-6 sketch và 2 file .txt được chuyển nguyên byte từ root, xác nhận bằng RELOCATION_MANIFEST.json. Manifest là lịch sử di chuyển v7; upstream v9–v11 đã bổ sung/sửa một số sketch. Sketch linh kiện không được sửa trong lượt v14. Giữ thư mục trùng tên .ino khi mở Arduino IDE. File .txt cần copy vào sketch riêng để chạy.
+6 sketch và 2 file .txt được chuyển nguyên byte từ root, xác nhận bằng RELOCATION_MANIFEST.json. Manifest là lịch sử di chuyển v7; upstream v9–v11 đã bổ sung/sửa một số sketch. Sketch linh kiện không được sửa trong lượt v15. Giữ thư mục trùng tên .ino khi mở Arduino IDE. File .txt cần copy vào sketch riêng để chạy.
 
 Sketch linh kiện không tự tắt đầy đủ bơm/van/SSR; tách tải khi service. Serial chia sẻ TX/RX với LED production. Không dùng chúng thay firmware vận hành. [QA_STATUS](../docs/QA_STATUS.md) phân biệt host/target pass với G10 NOT RUN.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+
+Đối chứng v14 commit75e184c: dùng snapshot build/v14-before-hidden-fixes.ino, kỳ vọng114case/7fail. Snapshot từ git show HEAD trước khi sửa; báo cáo chứa hash nguồn.

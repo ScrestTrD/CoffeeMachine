@@ -1,10 +1,10 @@
-# Hướng dẫn vận hành — source v14
+# Hướng dẫn vận hành — source v15
 
 Firmware trên máy chỉ thay đổi sau khi được nạp. Xem [QA_STATUS](../docs/QA_STATUS.md) trước khi xác nhận bản này đã nghiệm thu.
 
 ## Khởi động
 
-BOOT_SAFE hiện 14 → sau mẫu NTC hợp lệ bơm chạy 5s, van đóng, 8888 và hai LED nháy 2Hz → đun (8888 nháy, RUN 1Hz) → sẵn sàng (0000, RUN steady). READY LED chuyển về trạng thái HEATING khi nhiệt lọc giảm dưới setpoint−2°C; đây không phải ngưỡng đóng/cắt SSR. Không giữ RUN khi reset vì GPIO15 phải LOW để boot.
+BOOT_SAFE hiện 15 → sau mẫu NTC hợp lệ bơm chạy 5s, van đóng, 8888 và hai LED nháy 2Hz → đun (8888 nháy, RUN 1Hz) → sẵn sàng (0000, RUN steady). READY LED chuyển về trạng thái HEATING khi nhiệt lọc giảm dưới setpoint−2°C; đây không phải ngưỡng đóng/cắt SSR. Không giữ RUN khi reset vì GPIO15 phải LOW để boot.
 
 ## Pha preset
 
@@ -30,4 +30,9 @@ Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi
 
 E1 NTC invalid; E3 timeout mẫu boot/runtime; E6 EEPROM begin/save; E8 FSM state lạ. Fault latch mọi actuator OFF tới reset. Kiểm tra nguyên nhân trước reset. Quá 145°C ở nhiệt chưa lọc đã bù hoặc nhiệt lọc chỉ cắt SSR, không latch và không cắt bơm/van.
 
-Chu trình pha yêu cầu gia nhiệt nhưng NTC/fault/cutoff vẫn thắng. Thermal fuse/thermostat độc lập và bench tests vẫn cần; source v14 chưa tự chứng minh heater/hydraulic an toàn.
+Chu trình pha yêu cầu gia nhiệt nhưng NTC/fault/cutoff vẫn thắng. Thermal fuse/thermostat độc lập và bench tests vẫn cần; source v15 chưa tự chứng minh heater/hydraulic an toàn.
+
+
+V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
+
+Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.

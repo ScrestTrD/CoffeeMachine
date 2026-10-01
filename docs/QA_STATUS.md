@@ -1,31 +1,28 @@
-# CoffeeMachine — QA v14, giám sát sau pha
+# CoffeeMachine — QA v15
 
-Cập nhật 2026-10-01. Nhánh fix/brew-heat-recovery, baseline v11 commit1720787. Bản v14 được duyệt để commit/push lên origin/main. Chưa nạp ESP; trạng thái G10 vẫn NOT RUN.
+Baseline v14 commit75e184c, nhánh fix/brew-heat-recovery. V15 được duyệt để commit/push lên origin/main. Chưa nạp ESP; G10 NOT RUN.
 
-## Hành vi hiện hành
-- Suốt pha/record/clean, kể cả soak bơm OFF: yêu cầu đun; bảo vệ ưu tiên.
-- Sau mọi kết thúc/hủy/timeout chu trình thật: giữ giám sát. Filtered <set -> SSR ON; ≥set -> OFF ngay. Chạm set không xóa giám sát.
-- Chỉ trả về thermostat thường khi các mẫu mới liên tiếp nằm trong [set, set+0.5°C] ít nhất 3000ms. Đây là tiêu chí phần mềm, chưa phải ổn định nhiệt thực.
-- Ra ngoài vùng, thay setpoint, bảo vệ chặn heat hoặc khoảng publish ≥2s: tính lại xác nhận. Mẫu lặp không tiến timer. Dùng phép trừ unsigned qua rollover.
-- Sau handoff, thermostat v11 ON dưới set−0.5°C, OFF từ set+0.5°C. Không bảo đảm hết mọi trễ NTC; nếu không đạt điều kiện ổn định thì tiếp tục giám sát, không có timeout ép đun.
-- Prime/cancel trước pha không arm. Pha mới/fault xóa trạng thái giám sát cũ.
-- NTC +15°C, EEPROM v5, cutoff145°C và các mã E1/E3/E6/E8 giữ nguyên.
+## Thay đổi
+1. Giám sát sau pha không handoff chỉ vì nằm trong [set,set+0.5°C] 3s. Toàn cửa sổ còn phải có range ≤0.10°C và giảm từ peak ≤0.05°C. Vượt mức thì khởi động lại3s. Tolerance phần mềm cần bench; trôi nhỏ vẫn có thể được xem là ổn định.
+2. Đổi setpoint/clear latch/apply SSR trước synchronous EEPROM commit; failure vẫn latchesE6.
+3. Giữ hai nút lưu cập nhật activity, không bị timeout20s hủy khi save đang tiến hành.
+4. HEATING↔READY chỉ đổi state/hiển thị, giữ gesturetimers/queues. Stop/save chu trình vẫn dùng enterIdle để chống release gây xả ngoài ý muốn.
 
-## Kết quả
-| Kiểm tra | Trạng thái |
+Trong pha vẫn đun qua soak theo permission. Giám sát: filtered<set ON, ≥set OFF ngay; không timed boost. Sau handoff thermostat±0.5°C. NTC+15°C/EEPROMv5/cutoff145°C không đổi.
+
+## Kiểm chứng
+| Gate | Kết quả |
 |---|---|
-| G01–G08, H01–H19 | PASS 105/105 normal và ASan/UBSan; compile warning-as-error |
-| Cùng105 case trên snapshot trước sửa | EXPECTED FAIL 6 case ở mỗi mode: H03/H05/H16/H17/H18/H19 |
-| Audit bổ sung A01–A06 | PASS 6 nhóm; gồm grid56 trường hợp pha và56 trường hợp kết thúc |
-| G09 ESP8266 | PASS, core3.1.2, ShiftRegister74HC5951.3.1, ISR trong IRAM |
-| G10 phần cứng | NOT RUN; chưa nạp ESP |
+| G01–G08 + H01–H28 | PASS114/114 normal và ASan/UBSan, compiler warning-as-error |
+| Cùng114case trên sourcev14 | EXPECTED FAIL7case mỗi mode, xác nhận regression sensitivity |
+| G09 | PASS ESP8266core3.1.2, ShiftRegister74HC5951.3.1; ISR trong IRAM |
+| G10 | NOT RUN, không upload hoặc đo thiết bị |
 
-Source SHA256 host/target: 934afe590319bb7dd719405fc71697a37a9b4525ccc20e382882576b756f44f4
-
-Bằng chứng: host-gate-results.json, pre-monitor-reproduction.json, heat-monitor-audit-results.json, target-build-results.json, build-artifacts.json.
-Báo cáo v11-heat-reproduction.json (101 case/26 fail), heat-deep-audit-results.json và hai review ngày2026-10-01 là lịch sử trước thay đổi này.
+Source SHA256 host/target: 4ee3a98d21a08bb31d9a94fcc322a0c35dd8201e39c600f244638c317ac3533d
+Report hiện hành: host-gate-results.json, v14-hidden-reproduction.json, target-build-results.json và build-artifacts.json.
+Các reports trước monitor/hidden-fix là lịch sử, không thay kết quả hiện hành.
+Chi tiết sửa: [V15_HIDDEN_FIXES](V15_HIDDEN_FIXES_2026-10-01.md).
 
 ## Giới hạn
-Thử bước ADC từ filtered103 xuống raw calibrated95.9722: bật lại sau252ms/840ms/4200ms ở nhịp tick giả lập6/20/100ms. Không phải đo nhịp ESP hoặc nhiệt nước thực; bộ lọc và trễ sensor vẫn tồn tại.
-Bảo vệ145°C vẫn có thể cắt riêng SSR khi bơm chạy. Fault vẫn khóa đến reset.
-RAM28668/80192, IRAM60051/65536 (gồm cache32768), flash241720/1048576. Build có cảnh báo môi trường HOME và SyntaxWarning của toolchain; không lỗi compile/link.
+.10/.05°C là tiêu chí phần mềm, không chứng nhận NTC đáp ứng hoặc noise thật. Vẫn có trễ ADC/filter/vị trí đo/quán tính1400W và exact-set switching khi số đo nhiễu. Chưa thêm dwell/boost hoặc thay protection.
+Quá nhiệt>145°C có thể cắt riêngSSR trong khi bơm tiếp tục; fault latches đến reset.
