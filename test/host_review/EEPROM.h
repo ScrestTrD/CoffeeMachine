@@ -6,11 +6,12 @@ struct MockEEPROM {
   std::array<uint8_t,512> flash, pending;
   bool beginOk=true, commitOk=true;
   unsigned commits=0, puts=0;
+  void (*onCommit)()=nullptr; // observe actuator state at the synchronous flash boundary
   size_t bufferSize=0; bool bufferPresent=true;
   MockEEPROM() { erase(); }
   void erase() {
     flash.fill(255); pending=flash; beginOk=commitOk=true; commits=puts=0;
-    bufferSize=0; bufferPresent=true;
+    bufferSize=0; bufferPresent=true; onCommit=nullptr;
   }
   void begin(size_t size) {
     assert(size<=flash.size()); pending=flash; bufferSize=beginOk?size:0;
@@ -25,6 +26,6 @@ struct MockEEPROM {
     assert(offset+sizeof(T)<=pending.size());
     std::memcpy(pending.data()+offset,&v,sizeof(T)); ++puts;
   }
-  bool commit() { ++commits; if (!commitOk) return false; flash=pending; return true; }
+  bool commit() { if(onCommit) onCommit(); ++commits; if (!commitOk) return false; flash=pending; return true; }
 };
 static MockEEPROM EEPROM;

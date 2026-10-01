@@ -1,6 +1,6 @@
 # CoffeeMachine — gates và tiêu chí nghiệm thu
 
-Cập nhật 2026-09-30. Hành vi mục tiêu: firmware v7. Các test host dùng firmware thật với mock I/O; gate hardware chỉ đóng khi có bằng chứng đo thực tế. G01–G09 đã PASS với bằng chứng trong QA_STATUS; G10 NOT RUN.
+Cập nhật 2026-10-01. Hành vi mục tiêu: firmware v14. Các test host dùng firmware thật với mock I/O; gate hardware chỉ đóng khi có bằng chứng đo thực tế. G01–G09 đã PASS với bằng chứng trong QA_STATUS; G10 NOT RUN.
 
 | Gate | Finding | Tiêu chí bắt buộc | Bằng chứng |
 |---|---|---|---|
@@ -9,11 +9,17 @@ Cập nhật 2026-09-30. Hành vi mục tiêu: firmware v7. Các test host dùng
 | G03 | CM-003 | READY chỉ khi mẫu còn mới, không lỗi, nhiệt trong vùng sẵn sàng; nguội/hủy/no-preset tính lại readiness | Host FSM/button scenarios |
 | G04 | CM-004 | SET hoặc RUN giữ 2s dừng cả preamble và RUN_ACTIVE; không tự chạy/xả lại sau dừng | Host debounce/gesture sequences |
 | G05 | CM-005 | NTC boot và runtime timeout ở 2s; open/short/NaN latch; tính tuổi mẫu đúng khi millis wrap | Host sampling/fake clock |
-| G06 | CM-006 | Kiểm tra CRC/layout/giá trị hữu hạn/miền/preset; load snap 0.5; commit failure E6; config v3 hợp lệ giữ calibration/preset; restart bền | Host flash mock, fault injection |
+| G06 | CM-006 | Kiểm tra CRC/layout/giá trị hữu hạn/miền/preset; load snap 0.5; commit failure E6; config v5 hợp lệ giữ calibration/preset; restart bền | Host flash mock, fault injection |
 | G07 | CM-007 | Nhiệt chưa lọc đã bù vượt 145°C phải cắt SSR ở lần publish kế tiếp dù nhiệt lọc còn thấp; không cắt bơm/van vì overtemp; recovery cần cả raw và filtered ≤145 | Host thermal scenarios; độ trễ vật lý chờ G10 |
-| G08 | UI/persistence | Startup 5s van đóng; wet/soak/press 2s mỗi pha; timer extraction riêng; clean timeout; edit save/timeout; không commit EEPROM liên tục | Host regression |
-| G09 | Build ESP8266 | Compile/link sketch v7 với core/library thật; kiểm tra ISR nằm IRAM; lưu FQBN và phiên bản dependencies | Target compiler output + map |
+| G08 | UI/persistence | Startup 5s van đóng; wet/soak/press 2s mỗi pha; timer extraction riêng; clean timeout; edit save/timeout; không commit EEPROM liên tục; heat cả soak, giám sát sau pha ON dưới set/OFF từ set và xác nhận ổn định 3s; chốt SSR trước flash commit | Host regression |
+| G09 | Build ESP8266 | Compile/link sketch v14 với core/library thật; kiểm tra ISR nằm IRAM; lưu FQBN và phiên bản dependencies | Target compiler output + map |
 | G10 | Hardware | Wiring/default OFF/reset; boot straps; NTC đa điểm; SSR trigger, overshoot/cutoff, pump/valve hydraulics; power-loss/fuse | Bench log và số đo |
+
+## Contract nhiệt v14 (H01–H19)
+
+105 host case gồm70 case nền và35 case nhiệt, nhóm H01–H19. Báo cáo v11 101 case là bằng chứng lịch sử của contract trước. Xem [review từng khối](HEAT_CONTROL_REVIEW_2026-10-01.md).
+
+Trong pha/record/clean yêu cầu ON qua permission; Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không dùng raw làm ngưỡng recovery, không timer boost. Fault/cutoff vẫn thắng; cancel trước khi chạy không arm. Prime giữ hành vi v11.
 
 ## Quy tắc thay đổi
 

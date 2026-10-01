@@ -1,18 +1,19 @@
-# Logic firmware v7
+# Logic firmware v14
 
 Đặc tả hành vi sửa; trạng thái kiểm chứng: [QA_STATUS](../docs/QA_STATUS.md).
 
 ## Supervisor
 
-Mỗi tick: poll nút → sample NTC → supervisor → thermostat → SSR qua permission → FSM → chốt SSR qua permission → LED. Permission dùng allowlist state vận hành; BOOT_SAFE/FAULT_LATCHED/state lạ luôn false. NTC phải hữu hạn, hợp lệ, mới dưới 2s; không fault; cả raw đã bù và control ≤145°C. State lạ latch E8.
+Mỗi tick: poll nút → sample NTC → supervisor/pre-cut nếu không được phép → FSM → áp yêu cầu nhiệt theo mode qua permission → LED. Permission dùng allowlist state vận hành; BOOT_SAFE/FAULT_LATCHED/state lạ luôn false. NTC phải hữu hạn, hợp lệ, mới dưới 2s; không fault; cả raw đã bù và control ≤145°C. State lạ latch E8.
 
 Sensor lỗi runtime latch E1 ngay lần publish; không publish hợp lệ trong 2s latch E3. Lỗi storage/save latch E6. Latch tắt bơm/van/SSR tới reset, không bị lệnh chốt SSR đảo ngược.
 
-SSR yêu cầu ON nếu thermostat ON hoặc pump ON; overtemp chỉ khóa SSR, tự hồi khi cả raw/control ≤145. Ngưỡng số đo không thay thermal fuse hoặc kết quả hiệu chuẩn thực.
+Có ba mode yêu cầu nhiệt: chu trình pha (RUN_PUMP_PREDELAY/RUN_ACTIVE/PRESET_RECORD_ACTIVE/CLEAN_FLUSH), hồi nhiệt, thermostat bình thường. Chu trình yêu cầu ON kể cả soak. Khi rời chu trình thật, arm hồi nhiệt; filtered<sp thìON, filtered≥sp thìOFF nhưng giữ giám sát. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. New cycle/fault xoá recovery cũ. Chọn/hủy trước pha không arm. Prime vẫn dùng pump-force/thermostat.
+Cuối preset/record, chuyển mode và chốt SSR trước EEPROM commit. Vòng lặp không ghi mức ON cũ trước khi xử lý stop; pre-cut không an toàn vẫn chạy trước FSM. Overtemp chỉ khóa SSR, tự hồi khi cả raw/control ≤145. Ngưỡng số đo không thay thermal fuse hoặc kết quả hiệu chuẩn thực.
 
 ## FSM và timer
 
-Prime 5s van đóng; wet 2s van+bơm, soak 2s cả hai OFF, press 2s bơm/van đóng, rồi chiết. Display seconds từ RUN; preset seconds từ mở van chiết. Recording dùng flag “chiết đã bắt đầu”, không dùng timestamp 0 làm sentinel. Timeout 60s hủy recording trước khi xử lý RUN lưu ở cùng tick.
+Prime 5s van đóng; wet 2s van+bơm, soak 2s bơm/van OFF nhưng SSR vẫn yêu cầu ON, press 2s bơm/van đóng, rồi chiết. Display seconds từ RUN; preset seconds từ mở van chiết. Recording dùng flag “chiết đã bắt đầu”, không dùng timestamp 0 làm sentinel. Timeout 60s hủy recording trước khi xử lý RUN lưu ở cùng tick.
 
 SET hoặc RUN hold 2s hủy ở RUN_PUMP_PREDELAY/RUN_ACTIVE. Sau mọi return/cancel/no-preset, readiness tính lại theo sensor. READY demote khi nguội; HEATING lên READY rồi return, tránh xử lý gesture hai lần.
 
@@ -20,7 +21,7 @@ CLEAN_FLUSH và SETPOINT_EDIT giữ gesture hiện có. Guard SET-held khi vào 
 
 ## Persistence
 
-CRC/header bảo vệ cấu trúc; semantic validation bảo vệ miền giá trị. Setpoint load snap 0.5; NaN/inf/out-of-range và calibration/preset lỗi trả defaults. Preset ghi chỉ 1–60s. Config v3 hợp lệ giữ R0/Beta custom; thay defaults không âm thầm migrate calibration.
+CRC/header bảo vệ cấu trúc; semantic validation bảo vệ miền giá trị. Setpoint load snap 0.5; NaN/inf/out-of-range và calibration/preset lỗi trả defaults. Preset ghi chỉ 1–60s. Config v5 hợp lệ giữ R0/Beta custom; thay defaults không âm thầm migrate calibration.
 
 Save trả kết quả commit; failure latch E6 trước khi báo hoàn tất. Không commit khi setpoint/preset/lastPreset không đổi. EEPROM mock kiểm tra side-effect counts và reboot, không mô phỏng mất điện trong flash erase thực.
 

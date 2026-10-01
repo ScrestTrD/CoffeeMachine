@@ -4,6 +4,7 @@ import argparse,json,pathlib,subprocess,tempfile,hashlib,datetime,sys
 root=pathlib.Path(__file__).resolve().parents[1]
 ap=argparse.ArgumentParser()
 ap.add_argument('--baseline',type=pathlib.Path,help='Optional v6 snapshot: expect regression failure.')
+ap.add_argument('--firmware',type=pathlib.Path,default=root/'CoffeeMachine/CoffeeMachine.ino',help='Source override for same-suite reproduction; no device I/O.')
 ap.add_argument('--report',type=pathlib.Path,help='Save JSON verification evidence.')
 args=ap.parse_args()
 results={}
@@ -11,6 +12,7 @@ with tempfile.TemporaryDirectory(prefix='coffee-gates-') as tmp:
     for mode,extra in [('normal',[]),('sanitized',['-fsanitize=address,undefined','-fno-omit-frame-pointer'])]:
         binary=pathlib.Path(tmp)/mode
         command=['g++','-std=c++11','-Wall','-Wextra','-Wpedantic','-Werror','-g']+extra+[
+          '-DCOFFEE_FIRMWARE="'+str(args.firmware.resolve())+'"',
           '-I',str(root/'test/host_review'),str(root/'test/host_review/review.cpp'),'-o',str(binary)]
         build=subprocess.run(command,capture_output=True,text=True)
         item={'compileExit':build.returncode,'compileStderr':build.stderr}
@@ -33,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='coffee-gates-') as tmp:
             print('BASELINE (expected failure):\n'+run.stdout,end='')
         results['baseline']=item
 evidence={'timestampUTC':datetime.datetime.now(datetime.timezone.utc).isoformat(),
-          'firmwareSha256':hashlib.sha256((root/'CoffeeMachine/CoffeeMachine.ino').read_bytes()).hexdigest(),
+          'firmwareSha256':hashlib.sha256(args.firmware.read_bytes()).hexdigest(),
           'platform':'host mocks; ESP8266 and bench gates NOT RUN','results':results}
 if args.report:
     args.report.parent.mkdir(parents=True,exist_ok=True)

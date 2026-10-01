@@ -32,6 +32,13 @@
   v11 (2026-09-30 22:39):
     - NTC_CAL_OFFSET_C 0 -> +15 C: v9 fit reads uniformly ~15 LOW vs reference.
       CFG unchanged (offset is a code const; stored R0/Beta stay valid).
+  v14 (2026-10-01):
+    - Brew heat covers the whole preset/recording cycle, including pump-off soak.
+    - On cycle end/abort, recover only while filtered NTC is below setpoint.
+      At/above setpoint stop immediately and clear the old thermostat request.
+    - Monitor after brew: OFF at set, ON below set; return to thermostat only
+      after fresh readings stay in [set, set+0.5 C] for 3 s; no timed heat boost.
+    - Keep v11 NTC calibration, fault codes, 145 C cutoff and EEPROM v5.
 */
 
 #include <Arduino.h>
@@ -41,7 +48,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 11;
+static const uint8_t FW_VERSION = 14;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -81,6 +88,7 @@ constexpr float SETPOINT_STEP_C = 0.5f;   // constexpr: needed by the step asser
 // OFF at/above (setpoint + 0.5 C). Total dead-band = 1 C around the setpoint.
 // No PWM, no time-proportional window.
 const float THERMOSTAT_HYSTERESIS_C = 1.0f;
+const uint32_t RECOVERY_STABLE_MS = 3000; // observation only, never forced heat
 const float READY_BAND_C         = 2.0f;    // ready threshold below setpoint
 
 // --- NTC measurement (COFFE_README section 4) ---
@@ -456,6 +464,7 @@ class NtcSensor {
     FaultCode faultCode() const {
       return fault;
     }
+    uint32_t measurementMs() const { return lastValidMs; }
     bool freshEnough(uint32_t now) const {
       return ctrlValid && (uint32_t)(now - lastValidMs) < NTC_TIMEOUT_MS;
     }
@@ -483,7 +492,7 @@ class NtcSensor {
         return;
       }
       fault = FAULT_NONE;
-      float tCal = tRaw + NTC_CAL_OFFSET_C;   // v8: offset retired (0.0)
+      float tCal = tRaw + NTC_CAL_OFFSET_C;   // v11 calibration: +15 C
       lastRawT = tCal;
       lastValidMs = millis();
       if (!ctrlValid) {
@@ -600,7 +609,7 @@ class Persistence {
         defaults();
         return;
       }
-      // Preserve valid v3 calibration/presets, normalize only the setpoint.
+      // Preserve valid v5 calibration/presets, normalize only the setpoint.
       cfg.temperatureSetpointC = clampSetpoint(cfg.temperatureSetpointC);
       cfg.crc32 = calcCrc();   // normalization changes only the RAM record
     }
@@ -768,6 +777,12 @@ class Thermostat {
       return heaterOn_;
     }
 
+    // Recovery ends at setpoint, below the normal OFF threshold (+0.5 C).
+    // Clear the old latch so normal hysteresis cannot turn heat back on there.
+    void clearHeatRequest() {
+      heaterOn_ = false;
+    }
+
   private:
     float setpoint;
     bool heaterOn_;
@@ -816,6 +831,8 @@ class CoffeeMachine {
       state = BOOT_SAFE;
       fault = FAULT_NONE;
       pumpOn_ = false;
+      recoveringHeat_ = false;
+      recoveryStable_ = false;
       stateEnteredMs = millis();
       startupSensorsChecked = false;
       if (!storageReady) latchFault(FAULT_CRC);
@@ -831,12 +848,10 @@ class CoffeeMachine {
       uint32_t now = millis();
       ntcTick(now);
 
-      // Actuators are always re-derived from the safety supervisor every tick.
-      // Heating permission is evaluated independent of UI state.
-      // Owner request: pump forces heating (SSR ON while pump runs).
-      bool heatingPermitted = heatingPermission();
-      if (ntc.valid()) thermostat.update(ntc.controlTemp());
-      setActuatorSSR((thermostat.heaterOn() || pumpOn_) && heatingPermitted);
+      // Cut an unsafe heater before any FSM work (including EEPROM writes).
+      // Normal heat demand is applied AFTER transitions, avoiding stale pump/
+      // thermostat writes at the start or end of a brew cycle.
+      if (!heatingPermission()) setActuatorSSR(false);
 
       switch (state) {
         case BOOT_SAFE:            tickBootSafe(now); break;
@@ -854,9 +869,7 @@ class CoffeeMachine {
         case FAULT_LATCHED:        tickFaultLatched(now); break;
         default:                   failClosed(); break;
       }
-      // Re-assert SSR with the fresh pump state from this tick (setActuatorPump
-      // runs inside the FSM above). Hard cut in heatingPermission() still wins.
-      setActuatorSSR((thermostat.heaterOn() || pumpOn_) && heatingPermission());
+      applyHeating();
       applyLeds(now);
     }
 
@@ -882,13 +895,79 @@ class CoffeeMachine {
     uint32_t cleanStartMs = 0;      // flush/clean run start
     uint32_t flushPressStartMs = 0; // SET press-start during clean flush (stop gesture)
     uint8_t currentPreset;
-    bool pumpOn_ = false;   // tracks actual pump output; forces SSR while running
+    bool pumpOn_ = false;   // prime retains the v11 pump-forced heating request
+    bool recoveringHeat_ = false;
+    bool recoveryStable_ = false;
+    uint32_t recoveryStableSince_ = 0, recoverySampleMs_ = 0;
+    float recoverySetpoint_ = DEFAULT_SETPOINT_C;
+
+    static bool brewingState(FsmState s) {
+      return s == RUN_PUMP_PREDELAY || s == RUN_ACTIVE ||
+             s == PRESET_RECORD_ACTIVE || s == CLEAN_FLUSH;
+    }
+
+    void applyHeating() {
+      if (!heatingPermission()) {
+        recoveryStable_ = false;
+        setActuatorSSR(false);
+        return;
+      }
+      if (brewingState(state)) {
+        // The complete cycle requests heat, including the pump-off soak.
+        setActuatorSSR(true);
+        return;
+      }
+      if (recoveringHeat_) {
+        const float sp = thermostat.getSetpoint();
+        const float temp = ntc.controlTemp();
+        // A hot end stops heat, not monitoring. A later dip reheats at set.
+        thermostat.clearHeatRequest();
+        setActuatorSSR(temp < sp);
+        if (sp != recoverySetpoint_) {
+          recoveryStable_ = false;
+          recoverySetpoint_ = sp;
+          recoverySampleMs_ = ntc.measurementMs();
+        }
+        if (temp < sp || temp > sp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
+          recoveryStable_ = false;
+        }
+        const uint32_t sampleMs = ntc.measurementMs();
+        if (sampleMs != recoverySampleMs_) {
+          // A gap cannot count as observed stability, even if a new sample
+          // arrives before the watchdog sees the old one expire.
+          if (uint32_t(sampleMs - recoverySampleMs_) >= NTC_TIMEOUT_MS)
+            recoveryStable_ = false;
+          recoverySampleMs_ = sampleMs;
+          if (temp >= sp && temp <= sp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
+            if (!recoveryStable_) {
+              recoveryStable_ = true;
+              recoveryStableSince_ = sampleMs;
+            } else if (uint32_t(sampleMs - recoveryStableSince_) >= RECOVERY_STABLE_MS) {
+              recoveringHeat_ = false;
+              recoveryStable_ = false;
+            }
+          }
+        }
+        return;
+      }
+      thermostat.update(ntc.controlTemp());
+      setActuatorSSR(thermostat.heaterOn() || pumpOn_);
+    }
 
     // ---------- helpers ----------
     bool elapsed(uint32_t start, uint32_t ms) {
       return (millis() - start) >= ms;
     }
     void enterState(FsmState s) {
+      if (s == FAULT_LATCHED || brewingState(s)) {
+        recoveringHeat_ = false;
+        recoveryStable_ = false;
+      } else if (brewingState(state)) {
+        recoveringHeat_ = true;
+        recoveryStable_ = false;
+        recoverySampleMs_ = ntc.measurementMs();
+        recoverySetpoint_ = thermostat.getSetpoint();
+      }
       state = s;
       stateEnteredMs = millis();
     }
@@ -1329,6 +1408,7 @@ class CoffeeMachine {
         uint32_t flowSecs = recFlowStarted ? ((now - recValveOpenMs) / 1000) : 0;
         recValveOpenMs = 0;
         recFlowStarted = false;
+        enterIdleAfterDose();
         if (flowSecs > 0) {
           bool changed = pers.presetSeconds(selectRecordIdx) != flowSecs ||
                          pers.lastPreset() != selectRecordIdx;
@@ -1339,7 +1419,6 @@ class CoffeeMachine {
             return;
           }
         }
-        enterIdleAfterDose();
       }
     }
 
@@ -1347,6 +1426,8 @@ class CoffeeMachine {
     // the READY LED means "ready to brew" and must not lie.
     void enterIdleAfterDose() {
       enterIdle(readyNow(thermostat.getSetpoint()) ? READY_IDLE : HEATING_IDLE);
+      // Decide the post-cycle output immediately, also before a flash commit.
+      applyHeating();
     }
 
     void tickRunPredelay(uint32_t now) {
@@ -1374,7 +1455,7 @@ class CoffeeMachine {
         return;
       }
       if (t < DOSE_PREWET_MS + DOSE_SOAK_MS) {
-        // Let the coffee absorb the water: everything off.
+        // Let the coffee absorb water: pump/valve OFF; brew heat stays requested.
         setActuatorValve(false);
         setActuatorPump(false);
         return;
@@ -1423,6 +1504,7 @@ class CoffeeMachine {
       if (targetSecs > 0 && elapsed(doseValveOpenMs, targetSecs * 1000UL)) {
         setActuatorValve(false);
         setActuatorPump(false);
+        enterIdleAfterDose();
         if (pers.lastPreset() != currentPreset) {
           pers.setLastPreset(currentPreset);
           if (!pers.save()) {
@@ -1430,7 +1512,6 @@ class CoffeeMachine {
             return;
           }
         }
-        enterIdleAfterDose();
       }
     }
 

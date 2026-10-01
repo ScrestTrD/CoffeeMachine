@@ -242,7 +242,7 @@ int main() {
     check(m.state==STARTUP_PRIME && m.fault==FAULT_NONE,"new timestamp compared to old clock");
     fakeMs=48; m.tick(); check(m.fault==FAULT_NONE && pins[PIN_PUMP]==HIGH,"new sample underflowed age");
   });
-  test("G06 valid v3 calibration and presets preserved, setpoint snapped", []{
+  test("G06 valid v5 calibration and presets preserved, setpoint snapped", []{
     resetIo(); PersistentConfig cfg=goodConfig(); cfg.temperatureSetpointC=97.3f;
     cfg.ntcR0=65000; cfg.ntcBeta=4100; cfg.presets[1].valid=1; cfg.presets[1].seconds=30;
     cfg.lastPreset=2; seedFlash(cfg); CoffeeMachine m; m.begin();
@@ -250,7 +250,7 @@ int main() {
     check(m.pers.setpointC()==97.5f && m.pers.ntcR0()==65000 && m.pers.ntcBeta()==4100,
           "load overwrote valid custom calibration");
     check(m.pers.presetSeconds(2)==30 && m.pers.lastPreset()==2 && EEPROM.commits==0,
-          "v3 load lost presets or wrote flash");
+          "v5 load lost presets or wrote flash");
   });
   struct InvalidCase { const char* name; std::function<void(PersistentConfig&)> change; };
   const InvalidCase badCases[]={
@@ -442,6 +442,7 @@ int main() {
     check(m.state==FAULT_LATCHED && m.fault==FAULT_NTC_INVALID && allOff() && noActuatorHighWrite(),
           "UI/sensor recovery cleared fault");
   });
+#include "heat_recovery_cases.h"
 #endif
   std::cout<<"RESULT tests="<<total<<" failed="<<failed<<"\n";
   return failed?1:0;

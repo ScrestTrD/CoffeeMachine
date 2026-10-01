@@ -1,50 +1,31 @@
-# CoffeeMachine — trạng thái QA v7
+# CoffeeMachine — QA v14, giám sát sau pha
 
-Cập nhật 2026-09-30. Source firmware v7 đã sửa; chưa nạp thiết bị.
+Cập nhật 2026-10-01. Nhánh fix/brew-heat-recovery, baseline v11 commit1720787. Bản v14 được duyệt để commit/push lên origin/main. Chưa nạp ESP; trạng thái G10 vẫn NOT RUN.
+
+## Hành vi hiện hành
+- Suốt pha/record/clean, kể cả soak bơm OFF: yêu cầu đun; bảo vệ ưu tiên.
+- Sau mọi kết thúc/hủy/timeout chu trình thật: giữ giám sát. Filtered <set -> SSR ON; ≥set -> OFF ngay. Chạm set không xóa giám sát.
+- Chỉ trả về thermostat thường khi các mẫu mới liên tiếp nằm trong [set, set+0.5°C] ít nhất 3000ms. Đây là tiêu chí phần mềm, chưa phải ổn định nhiệt thực.
+- Ra ngoài vùng, thay setpoint, bảo vệ chặn heat hoặc khoảng publish ≥2s: tính lại xác nhận. Mẫu lặp không tiến timer. Dùng phép trừ unsigned qua rollover.
+- Sau handoff, thermostat v11 ON dưới set−0.5°C, OFF từ set+0.5°C. Không bảo đảm hết mọi trễ NTC; nếu không đạt điều kiện ổn định thì tiếp tục giám sát, không có timeout ép đun.
+- Prime/cancel trước pha không arm. Pha mới/fault xóa trạng thái giám sát cũ.
+- NTC +15°C, EEPROM v5, cutoff145°C và các mã E1/E3/E6/E8 giữ nguyên.
 
 ## Kết quả
+| Kiểm tra | Trạng thái |
+|---|---|
+| G01–G08, H01–H19 | PASS 105/105 normal và ASan/UBSan; compile warning-as-error |
+| Cùng105 case trên snapshot trước sửa | EXPECTED FAIL 6 case ở mỗi mode: H03/H05/H16/H17/H18/H19 |
+| Audit bổ sung A01–A06 | PASS 6 nhóm; gồm grid56 trường hợp pha và56 trường hợp kết thúc |
+| G09 ESP8266 | PASS, core3.1.2, ShiftRegister74HC5951.3.1, ISR trong IRAM |
+| G10 phần cứng | NOT RUN; chưa nạp ESP |
 
-| Gate | Trạng thái | Bằng chứng |
-|---|---|---|
-| G01–G08 | PASS — host logic | 70/70 assertions ở bản thường và ASan/UBSan; -Wall -Wextra -Wpedantic -Werror, không warning hoặc sanitizer error |
-| Regression v6 | EXPECTED FAIL | 5/5 ca cốt lõi fail trên snapshot v6; các ca tương ứng pass trên v7 |
-| G09 | PASS — target build | ESP8266 core 3.1.2, ShiftRegister74HC595 1.3.1; FQBN esp8266:esp8266:nodemcuv2; compile/link exit 0; FlowSensor::flowIsr tại 0x401000f0 trong .text1 (IRAM) |
-| G10 | NOT RUN — hardware | Chưa đo wiring/reset/nguồn/NTC/calibration/heater/hydraulic/power-loss; chưa có firmware upload |
+Source SHA256 host/target: 934afe590319bb7dd719405fc71697a37a9b4525ccc20e382882576b756f44f4
 
-Firmware SHA256 của cả host và target evidence:
-`001f5701e5f792207db7a8168d6778c3fd329cad4bebb05fe7aa7e5011764abf`
+Bằng chứng: host-gate-results.json, pre-monitor-reproduction.json, heat-monitor-audit-results.json, target-build-results.json, build-artifacts.json.
+Báo cáo v11-heat-reproduction.json (101 case/26 fail), heat-deep-audit-results.json và hai review ngày2026-10-01 là lịch sử trước thay đổi này.
 
-[Host JSON](host-gate-results.json), [target JSON](target-build-results.json), [gate definitions](QA_GATES.md), [bench cases](BENCH_TEST_PLAN.md). Số đếm là 70 case duy nhất chạy ở 2 chế độ, không phải 140 chức năng khác nhau.
-
-## Findings
-
-| Finding | Source v7 | Phần còn cần kiểm chứng |
-|---|---|---|
-| CM-001 | Fixed + G01 PASS: fault/state không bật lại SSR | Electrical OFF khi reset/unpowered: G10 |
-| CM-002 | Fixed + G02 PASS: recording timeout 60s hủy/không ghi đè | Thủy lực và giới hạn liều thực: G10 |
-| CM-003 | Fixed + G03 PASS: READY/cancel/no-preset tính lại nhiệt | Nhiệt thật/readiness UX: G10 |
-| CM-004 | Fixed + G04 PASS: RUN hold dừng preamble/active | Nút thực/debounce khi có EMI: G10 |
-| CM-005 | Fixed + G05 PASS: watchdog mẫu runtime/boot và rollover | NTC/EMI/reset trên thiết bị: G10 |
-| CM-006 | Fixed + G06 PASS: semantic validation, snap, checked saves, restart/commit counts | Flash power-loss/erase failure thực: G10 |
-| CM-007 | Fixed phần logic + G07 PASS: cutoff xét raw đã bù và filtered | Calibration/overshoot/độ trễ vật lý vẫn OPEN trong G10 |
-
-## Phạm vi và giới hạn
-
-- Host mock dùng đúng chữ ký ESP8266 EEPROM begin void/length/getConstDataPtr/commit bool. Kiểm tra buffer setup phát hiện size/pointer lỗi; upstream begin không expose flashRead status. Không tuyên bố phát hiện đầy đủ mọi lỗi đọc flash.
-- Mock commit-failure giữ flash cũ để kiểm tra đường lỗi/reboot. Flash ESP8266 thật có erase trước write; thất bại giữa erase/write hoặc mất điện có thể mất record. CRC/defaults xử lý record hỏng, chưa có dual-slot transactional storage. Không coi restart mock là nghiệm thu power-loss thực.
-- Defaults/calibration không được đổi âm thầm. Config v3 hợp lệ giữ R0/Beta/preset; invalid config hoặc preset >60s về defaults.
-- Target toolchain tạm dùng Arduino CLI 1.5.2-rc.1, core/library nêu trên. Metadata/log phiên bản lưu trong target JSON. Compile có cảnh báo môi trường thiếu HOME và SyntaxWarning từ elf2bin.py của core; không có lỗi compile/link. Không sửa môi trường hay toolchain dùng chung.
-- Build dùng RAM 28652/80192; IRAM tổng 60051/65536 (bao gồm cache 32768), flash 241368/1048576. IRAM còn khoảng 5.5KB; thay thư viện/flags cần build lại.
-- [Audit v6](../CODE_REVIEW_2026-09-30.md) là snapshot lịch sử trước sửa. Các hash “code không đổi”/lỗi hiện có trong snapshot chỉ áp dụng lượt audit v6, không áp dụng v7.
-
-## Build artifacts đã lưu
-
-Binary/ELF/map tại build/v7/ (gitignored). [Manifest/hash](build-artifacts.json). Binary SHA256: 2be2cc660732f44a754070d8b2150739dd0cc117b331081c162ad61b5cf6336e. Chưa upload thiết bị.
-
-## API tham chiếu
-
-Đã đối chiếu [EEPROM.h](https://github.com/esp8266/Arduino/blob/3.1.2/libraries/EEPROM/EEPROM.h) và [EEPROM.cpp](https://github.com/esp8266/Arduino/blob/3.1.2/libraries/EEPROM/EEPROM.cpp) của ESP8266 core; compile thật với 3.1.2 là bằng chứng tương thích dùng trong G09.
-
-G10 chưa chạy vì PC không kết nối ESP, theo xác nhận của chủ dự án ngày 2026-09-30. Không có thao tác upload hoặc điều khiển thiết bị trong lượt commit/push.
-
-Đã xác minh repository trên PC .171 tại H:\Develop\CoffeMachine khi chuẩn bị commit/push. Remote main trước push: 953cb1db2f7386e4e2084d357cfeebb29996c5e6.
+## Giới hạn
+Thử bước ADC từ filtered103 xuống raw calibrated95.9722: bật lại sau252ms/840ms/4200ms ở nhịp tick giả lập6/20/100ms. Không phải đo nhịp ESP hoặc nhiệt nước thực; bộ lọc và trễ sensor vẫn tồn tại.
+Bảo vệ145°C vẫn có thể cắt riêng SSR khi bơm chạy. Fault vẫn khóa đến reset.
+RAM28668/80192, IRAM60051/65536 (gồm cache32768), flash241720/1048576. Build có cảnh báo môi trường HOME và SyntaxWarning của toolchain; không lỗi compile/link.

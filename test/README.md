@@ -8,16 +8,21 @@ Firmware chính thức: ../CoffeeMachine/CoffeeMachine.ino. Các test tách riê
 python3 test/run_gates.py --report docs/host-gate-results.json
 ```
 
-Runner compile production source với mock I/O/EEPROM, chạy 70 assertions ở bản thường và AddressSanitizer/UBSan. Compiler flags có -Wall -Wextra -Wpedantic -Werror. Exit 0 = assertions an toàn pass; khác 0 = fail. Không còn semantics “lỗi tái hiện = pass” của reproducer cũ.
+Runner compile production source với mock I/O/EEPROM, chạy 105 assertions ở bản thường và AddressSanitizer/UBSan. Compiler flags có -Wall -Wextra -Wpedantic -Werror. Exit 0 = assertions an toàn pass; khác 0 = fail. Không còn semantics “lỗi tái hiện = pass” của reproducer cũ.
 
-Để kiểm tra regression trên snapshot v6:
+## Regression nhiệt trên cùng source
+
+Test mới trong host_review/heat_recovery_cases.h được include vào suite production. Bao phủ H01–H19: giám sát 3s, reset ổn định, mẫu cũ/gap, rollover, soak, các exits, filtered setpoint boundary, xoá thermostat latch, cutoff/faults, new cycle/edit/rollover và SSR trước flash commit. Mock EEPROM.onCommit chỉ quan sát trạng thái output tại ranh giới synchronous flash write.
+
+Để chạy lại đối chứng snapshot trước sửa (còn trong workspace build, gitignored):
 
 ```sh
-git show 953cb1db2f7386e4e2084d357cfeebb29996c5e6:CoffeeMachine/CoffeeMachine.ino > /tmp/coffee-v6-baseline.ino
-python3 test/run_gates.py --baseline /tmp/coffee-v6-baseline.ino --report docs/host-gate-results.json
+python3 test/run_gates.py --firmware build/v14-pre-monitor.ino --report docs/pre-monitor-reproduction.json
 ```
 
-Ở mode baseline, 5 case cốt lõi được chạy bằng API v6, phải exit 1; runner tổng chỉ pass nếu bản thường/sanitized pass và baseline fail đúng. Tests dùng private access để sắp fixture FSM/fault; các assertions xét actuator, display/state, timing, commits và dữ liệu sau restart. Button scenarios có cả debounce/pin sequences.
+Báo cáo v11 101 case/26 fail là lịch sử. Hiện tại chạy105 case; snapshot build/v14-pre-monitor.ino tái hiện lỗi giám sát (exit1), source mới pass (exit0). Host report hash đúng source được chọn bởi --firmware. JSON before/after lưu trong docs; đây là regression sensitivity, không phải phép đo nhiệt thật.
+
+--baseline vẫn dành cho5 case lịch sử v6 nếu có snapshot v6 riêng; không dùng cho v11 và không phải gate bắt buộc sau khi lịch sử repository đã squash.
 
 ## Target build G09
 
@@ -40,8 +45,9 @@ FQBN default esp8266:esp8266:nodemcuv2. Runner không upload; kiểm tra compile
 | TM1637Test/, TM1637Blink888/ | Module TM1637 khác hardware production |
 | 4X 7 Segment.txt | Sketch display tham chiếu gốc |
 | NTC_Temperature.txt | Sketch calibration tham chiếu, defaults100k/no offset |
+| host_review/heat_recovery_cases.h | Contract nhiệt hiện hành H01–H19 |
 | host_review/ | Mock I/O/EEPROM/display và regression suite hiện hành |
 
-6 sketch và 2 file .txt được chuyển nguyên byte từ root, xác nhận bằng RELOCATION_MANIFEST.json. Chúng chưa được sửa trong lượt này; các hạn chế trong audit baseline vẫn còn. Giữ thư mục trùng tên .ino khi mở Arduino IDE. File .txt cần copy vào sketch riêng để chạy.
+6 sketch và 2 file .txt được chuyển nguyên byte từ root, xác nhận bằng RELOCATION_MANIFEST.json. Manifest là lịch sử di chuyển v7; upstream v9–v11 đã bổ sung/sửa một số sketch. Sketch linh kiện không được sửa trong lượt v14. Giữ thư mục trùng tên .ino khi mở Arduino IDE. File .txt cần copy vào sketch riêng để chạy.
 
 Sketch linh kiện không tự tắt đầy đủ bơm/van/SSR; tách tải khi service. Serial chia sẻ TX/RX với LED production. Không dùng chúng thay firmware vận hành. [QA_STATUS](../docs/QA_STATUS.md) phân biệt host/target pass với G10 NOT RUN.

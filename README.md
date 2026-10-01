@@ -4,7 +4,7 @@ Controller NodeMCU ESP8266 cho máy pha cà phê. Code chính thức: [CoffeeMac
 
 ## Phiên bản và trạng thái
 
-Source v7 đã sửa findings v6 và pass G01–G09; G10 hardware chưa chạy. Firmware trên thiết bị chưa được nạp lại trong lượt này. Xem [QA_STATUS](docs/QA_STATUS.md) để biết gate nào đã chạy; số version lúc boot không chứng minh binary trùng source.
+Source v14 triển khai điều khiển nhiệt đã duyệt trên baseline v11: đun suốt pha kể cả soak, giám sát sau pha và chỉ trả về thermostat khi số đo ổn định 3 giây. Host105/105 và G09 pass; G10 hardware chưa chạy. Firmware trên thiết bị chưa được nạp lại trong lượt này. Xem [QA_STATUS](docs/QA_STATUS.md) để biết gate nào đã chạy; số version lúc boot không chứng minh binary trùng source.
 
 Repository gateway: /mnt/pc-dev/CoffeMachine, qua share //192.168.1.171/Develop. Đã xác minh trên PC .171: H:\Develop\CoffeMachine là repository tương ứng.
 
@@ -16,6 +16,7 @@ Mở sketch CoffeeMachine/CoffeeMachine.ino trong Arduino IDE. Dependencies: ESP
 - [Tổng quan](CoffeeMachine/readme.md), [hardware](CoffeeMachine/hardware.md), [logic](CoffeeMachine/logic.md), [thao tác chi tiết](CoffeeMachine/instruction.md)
 - [Spec hiện hành](COFFE_README.md)
 - [Gates và test acceptance](docs/QA_GATES.md)
+- [Rà soát từng khối và quyết định nhiệt v14](docs/HEAT_CONTROL_REVIEW_2026-10-01.md)
 - [Audit baseline v6](CODE_REVIEW_2026-09-30.md)
 
 Preview_AP.html là mockup lịch sử; source hiện hành không có WiFi AP, HTTP handler hoặc OTA. PID/PWM và dosing theo xung không thuộc implementation này.

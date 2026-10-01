@@ -1,6 +1,6 @@
 # CoffeeMachine — đặc tả hiện hành
 
-Cập nhật 2026-09-30. Source v7 đã triển khai; trạng thái thực hiện và kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md). Tài liệu này thay đặc tả trộn PID/xung/AP cũ; [audit v6](CODE_REVIEW_2026-09-30.md) giữ lịch sử findings.
+Cập nhật 2026-10-01. Source v14 đã triển khai; trạng thái thực hiện và kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md). Tài liệu này thay đặc tả trộn PID/xung/AP cũ; [audit v6](CODE_REVIEW_2026-09-30.md) giữ lịch sử findings.
 
 ## Hardware
 
@@ -15,7 +15,9 @@ Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng
 - NTC defaults R0=185000Ω, Beta=4890K (fit 2 điểm NTC mới 32/86°C, 2026-09-30 21:06), divider 10k, A0 full-scale giả định theo bo này 3.3V.
 - 7 ADC samples cách 6ms, median rồi Beta (R0 185000/Beta 4890) + offset +15 (v11, đọc thấp đều 15); alpha=0.25 cho nhiệt điều khiển.
 - Cắt SSR khi nhiệt đã bù chưa lọc hoặc nhiệt đã lọc >145°C. Khôi phục chỉ khi cả hai ≤145°C; không latch overtemp và không cắt bơm/van vì riêng ngưỡng này.
-- Bơm ON ép yêu cầu SSR ON, nhưng không vượt fault, freshness, BOOT_SAFE hoặc cutoff.
+- Trong pha preset/ghi preset, SSR được yêu cầu ON suốt wet/soak/press/extraction, kể cả bơm OFF trong soak. Xả cũng yêu cầu đun suốt lúc chạy.
+- Kết thúc/dừng/hủy/timeout chu trình: NTC sau lọc <setpoint thì hồi nhiệt; ≥setpoint thì SSR OFF ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không có khoảng ép đun cố định hoặc mục tiêu +1/+2°C.
+- Safety permission luôn thắng: fault, freshness, BOOT_SAFE/state lạ và cutoff. Prime giữ pump-force/thermostat v11; hủy chọn trước khi pha không arm hồi nhiệt.
 - Mẫu đầu phải hợp lệ trước prime. Không có publish lúc boot trong 2s: E3; ADC hở/chập/ngoài −40…300°C trước offset: E1. Sau startup, 2s không có mẫu hợp lệ mới: E3.
 - State lạ: E8; fault latch luôn tắt mọi actuator đến reset.
 
@@ -29,7 +31,7 @@ Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng
 | READY_IDLE | 0000, RUN steady; tính lại readiness mỗi tick |
 | READY criteria | NTC hợp lệ/còn mới, không fault/quá nhiệt, control temp ≥setpoint−2°C |
 | Chọn pha | RUN từ idle, SET đổi preset hợp lệ, RUN xác nhận; không có preset hiện no |
-| Preamble | 2s van+bơm ON → 2s cả hai OFF → 2s bơm ON/van đóng |
+| Preamble | 2s van+bơm ON → 2s bơm/van OFF → 2s bơm ON/van đóng; SSR vẫn yêu cầu ON qua safety |
 | RUN_ACTIVE | Thời gian liều tính từ mở van chiết; màn hình tính từ RUN bắt đầu |
 | Dừng pha | SET press hoặc RUN giữ 2s, cả preamble và chiết |
 | Ghi preset | SET giữ 3s → RUN đổi slot → SET chốt → RUN bắt đầu → RUN dừng/lưu; SET hủy |
@@ -38,6 +40,8 @@ Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng
 | SETPOINT_EDIT | SET+RUN 5s rồi nhả; RUN +1/SET −1; giữ cả hai 300ms lưu; bỏ 20s hủy |
 
 Cho phép bắt đầu liều từ heating idle, không có ready gate bắt buộc. Idle sau hủy/xong tính lại nhiệt. Queue và guard release tránh nút dừng tiếp tục kích xả ở idle. Các timer phải dùng unsigned subtraction để chịu millis rollover; timestamp bằng 0 không được dùng để kết luận “chưa chiết”.
+
+Nếu vừa kết thúc pha mà nhiệt lọc còn cao, SSR OFF theo số đo đã duyệt. Trong giám sát sau pha, nhiệt lọc dưới set thì bật lại ngay; không bảo đảm loại bỏ độ trễ nhiệt của cảm biến. Heater1400W (chủ máy cung cấp) có thể tiếp tục tăng nhiệt sau SSR OFF. Xác minh thực tế bằng G10.
 
 ## EEPROM
 

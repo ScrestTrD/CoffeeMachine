@@ -1,0 +1,19 @@
+{
+  "commandId": "/tmp/coffee-heat-deep-audit",
+  "commandClass": "execute",
+  "argv": [],
+  "cwd": ".",
+  "envKeys": [
+    "PATH"
+  ],
+  "stdout": "PASS A01 brew demand independent of pump across safe temperature grid\nPASS A02 all brew exits recover below set regardless of old thermostat latch\nPASS A03 hot filtered end discards recovery even with cold raw\nPASS A04 one target crossing ends recovery; subsequent fall uses idle deadband\nPASS A05 overtemperature blocks heat while brew pump remains on\nTRACE cadence_ms=6 restart_ms=294 raw=95.9722 filtered=96.9103\nTRACE cadence_ms=20 restart_ms=980 raw=95.9722 filtered=96.9103\nTRACE cadence_ms=100 restart_ms=4900 raw=95.9722 filtered=96.9103\nPASS A06 real ADC cooling step: measured software delay at several loop cadences\nTOTAL 6 FAILED 0\n",
+  "stderr": "",
+  "stdoutTruncated": false,
+  "stderrTruncated": false,
+  "applied": true,
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "cancelled": false,
+  "durationMs": 13
+}

@@ -1,6 +1,6 @@
-# Hardware — CoffeeMachine v7
+# Hardware — CoffeeMachine v14
 
-Board NodeMCU ESP8266. Pin map mô tả source và quyết định wiring được ghi trước đây; chưa có phép đo phần cứng mới trong lượt sửa v7. Xem [bench G10](../docs/BENCH_TEST_PLAN.md).
+Board NodeMCU ESP8266. Pin map mô tả source và quyết định wiring được ghi trước đây; chưa có phép đo phần cứng mới trong lượt sửa v14. Xem [bench G10](../docs/BENCH_TEST_PLAN.md).
 
 ## Pin map
 
@@ -27,11 +27,13 @@ Không dùng GPIO6–11 (flash). Không đổi D8 sang INPUT_PULLUP hoặc giữ
 - Divider 3.3V → 10k → A0 → NTC → GND. Defaults R0 185000Ω, Beta 4890K (fit 2 điểm NTC mới 2026-09-30 21:06) + offset +15 (v11, 2026-09-30 22:39); R0/Beta trong EEPROM v5 hợp lệ có thể khác defaults.
 - ADC rail checks ≤0.02V hoặc ≥3.28V; plausibility −40…300°C trước offset. Median 7 mẫu/6ms và lọc alpha0.25. NTC publish invalid latch E1; chưa publish boot hoặc không có mẫu hợp lệ mới runtime 2s latch E3.
 - Cutoff SSR xét raw đã bù và filtered >145°C; không phải thermal fuse, không bảo đảm nhiệt boiler thật. Overtemp tự hồi khi cả hai ≤145; bơm/van không bị cắt bởi riêng ngưỡng này.
-- Pump ON yêu cầu SSR ON nhưng BOOT_SAFE/fault/state lạ/mẫu stale/cutoff khóa heater. Unknown FSM E8, storage buffer/commit failure E6: mọi actuator OFF.
+- Chu trình pha yêu cầu SSR ON cả khi bơm OFF trong soak; prime vẫn dùng pump-force. Nhưng BOOT_SAFE/fault/state lạ/mẫu stale/cutoff khóa heater. Unknown FSM E8, storage buffer/commit failure E6: mọi actuator OFF.
 - SSR phải hỗ trợ kích 3.3V hoặc có driver phù hợp nguồn/input. Relay phải xác nhận active-HIGH. Bias phần cứng giữ mọi actuator OFF khi reset/unpowered; nguồn phải đủ khi ba tải cùng ON, mass low-voltage chung.
 - Mains cách ly low-voltage; sensor phải theo được nhiệt heater ở idle lẫn flowing. Thermal fuse và thermostat độc lập cần được xác minh trên thiết bị.
 - Flowmeter không quyết định liều, không có no-flow abort. Xác minh output điện (không đưa 5V push-pull vào GPIO).
 - GPIO1/3 dùng LED nên production không Serial.begin(). USB-UART có thể chọi RX; tách UART/LED đúng khi service. Test Serial không phải chế độ vận hành máy.
+
+Heater1400W theo chủ máy cung cấp ngày2026-10-01; chưa đo công suất/độ trễ NTC/overshoot trong lượt này. Hồi nhiệt v14 theo NTC sau lọc tới setpoint, không dự đoán nhiệt tích trữ.
 
 ## Kiểm chứng
 

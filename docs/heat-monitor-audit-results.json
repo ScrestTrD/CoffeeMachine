@@ -1,0 +1,5 @@
+{
+  "exitCode": 0,
+  "stdout": "PASS A01 brew demand independent of pump across safe temperature grid\nPASS A02 all brew exits recover below set regardless of old thermostat latch\nPASS A03 hot filtered end retains monitoring even with cold raw\nPASS A04 one target crossing retains monitoring; subsequent fall reheats\nPASS A05 overtemperature blocks heat while brew pump remains on\nTRACE cadence_ms=6 restart_ms=252 raw=95.9722 filtered=97.223\nTRACE cadence_ms=20 restart_ms=840 raw=95.9722 filtered=97.223\nTRACE cadence_ms=100 restart_ms=4200 raw=95.9722 filtered=97.223\nPASS A06 real ADC cooling step: measured software delay at several loop cadences\nTOTAL 6 FAILED 0\n",
+  "stderr": ""
+}
