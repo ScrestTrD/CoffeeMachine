@@ -1,28 +1,26 @@
-# CoffeeMachine — QA v15
+# CoffeeMachine — QA Status (Firmware v30)
 
-Baseline v14 commit75e184c, nhánh fix/brew-heat-recovery. V15 được duyệt để commit/push lên origin/main. Chưa nạp ESP; G10 NOT RUN.
+Phiên bản hiện hành: **v30** (commit `8147e6e` trên `main`), cập nhật ngày 2026-10-03.
 
-## Thay đổi
-1. Giám sát sau pha không handoff chỉ vì nằm trong [set,set+0.5°C] 3s. Toàn cửa sổ còn phải có range ≤0.10°C và giảm từ peak ≤0.05°C. Vượt mức thì khởi động lại3s. Tolerance phần mềm cần bench; trôi nhỏ vẫn có thể được xem là ổn định.
-2. Đổi setpoint/clear latch/apply SSR trước synchronous EEPROM commit; failure vẫn latchesE6.
-3. Giữ hai nút lưu cập nhật activity, không bị timeout20s hủy khi save đang tiến hành.
-4. HEATING↔READY chỉ đổi state/hiển thị, giữ gesturetimers/queues. Stop/save chu trình vẫn dùng enterIdle để chống release gây xả ngoài ý muốn.
+## Tóm tắt thay đổi từ v15 đến v30
 
-Trong pha vẫn đun qua soak theo permission. Giám sát: filtered<set ON, ≥set OFF ngay; không timed boost. Sau handoff thermostat±0.5°C. NTC+15°C/EEPROMv5/cutoff145°C không đổi.
+1. **v16**: Bỏ bù trừ cố định `+15°C` do kết quả đo thực tế báo cao hơn nhiệt độ chuẩn.
+2. **v17**: Bỏ cắt cứng phần mềm 145°C (`ABS_OVERTEMP_C`), chuyển hoàn toàn việc bảo vệ quá nhiệt tối cao sang cầu chì nhiệt phần cứng độc lập.
+3. **v18**: Giữ SSR ép bật trong suốt chu trình pha và duy trì cửa sổ hoãn 5 giây (`BREW_HEAT_HOLD_MS = 5000`) sau khi kết thúc pha, tạm hoãn bắt lỗi NTC để tránh ngắt nhiệt do trễ cảm biến.
+4. **v19**: Hiển thị `8888` nháy chỉ khi nồi lạnh (`< 80°C`); từ 80°C trở lên hiển thị `0000` đun tĩnh.
+5. **v20**: Hồi nhiệt sau pha chuyển sang đọc theo nhiệt độ `rawTemp()` để phản ứng nhanh hơn độ trễ lọc thông thấp. Mồi `requestHeat()` khi handoff về thermostat nếu nhiệt độ còn dưới setpoint.
+6. **v21**: Chống nhảy số bất thường ở NTC (`NTC_MAX_STEP_C = 15°C`) và yêu cầu 2 cửa sổ đo ban đầu đồng thuận khi cold start.
+7. **v22 / v23**: Nâng mục tiêu hồi nhiệt sau pha lên `setpoint + 10°C` (`POST_BREW_BOOST_C = 10.0f`), duy trì ổn định trong 5 giây (`RECOVERY_STABLE_MS = 5000`) rồi mới bàn giao cho thermostat.
+8. **v24 / v25**: Bổ sung trần an toàn phần mềm `HEAT_CAP_C = 120°C` tự động ngắt SSR khi không pha nếu nhiệt độ đạt 120°C.
+9. **v26 / v28**: Bổ sung bù trễ nhiệt đạo hàm `leadT = rawT + NTC_LEAD_S * rate` (đo trên cửa sổ 500 ms, `NTC_LEAD_S = 10s`).
+10. **v27**: Rút ngắn chu kỳ lấy mẫu NTC xuống ~9 ms (9 mẫu × 1 ms).
+11. **v29**: Debounce lỗi NTC với 5 cửa sổ xấu liên tiếp (`NTC_FAULT_DEBOUNCE = 5`) trước khi latch lỗi E1/E3.
+12. **v30**: Ngắt SSR trong 2 giây ngâm ủ (Soak) của chu trình preamble. Bổ sung bản build chẩn đoán `test/CoffeeMachineDebug`.
 
-## Kiểm chứng
-| Gate | Kết quả |
-|---|---|
-| G01–G08 + H01–H28 | PASS114/114 normal và ASan/UBSan, compiler warning-as-error |
-| Cùng114case trên sourcev14 | EXPECTED FAIL7case mỗi mode, xác nhận regression sensitivity |
-| G09 | PASS ESP8266core3.1.2, ShiftRegister74HC5951.3.1; ISR trong IRAM |
-| G10 | NOT RUN, không upload hoặc đo thiết bị |
+## Kiểm chứng và trạng thái Gates
 
-Source SHA256 host/target: 4ee3a98d21a08bb31d9a94fcc322a0c35dd8201e39c600f244638c317ac3533d
-Report hiện hành: host-gate-results.json, v14-hidden-reproduction.json, target-build-results.json và build-artifacts.json.
-Các reports trước monitor/hidden-fix là lịch sử, không thay kết quả hiện hành.
-Chi tiết sửa: [V15_HIDDEN_FIXES](V15_HIDDEN_FIXES_2026-10-01.md).
-
-## Giới hạn
-.10/.05°C là tiêu chí phần mềm, không chứng nhận NTC đáp ứng hoặc noise thật. Vẫn có trễ ADC/filter/vị trí đo/quán tính1400W và exact-set switching khi số đo nhiễu. Chưa thêm dwell/boost hoặc thay protection.
-Quá nhiệt>145°C có thể cắt riêngSSR trong khi bơm tiếp tục; fault latches đến reset.
+| Gate | Mô tả | Trạng thái |
+|---|---|---|
+| G01–G08 | Host unit test & logic FSM | PASS trên commit v30 |
+| G09 | Target build ESP8266 Core 3.1.2 + ShiftRegister74HC595 | PASS trên commit v30 |
+| G10 | Kiểm chứng phần cứng vật lý trên máy thực tế | Đang thực hiện bench testing và nạp thử nghiệm |

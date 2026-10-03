@@ -1,45 +1,40 @@
-# Hardware — CoffeeMachine v15
+# Hardware — CoffeeMachine v30
 
-Board NodeMCU ESP8266. Pin map mô tả source và quyết định wiring được ghi trước đây; chưa có phép đo phần cứng mới trong lượt sửa v15. Xem [bench G10](../docs/BENCH_TEST_PLAN.md).
+Board NodeMCU ESP8266 (ESP-12E). Pin map mô tả cấu hình phần cứng theo firmware v30. Xem kế hoạch kiểm thử bench [G10](../docs/BENCH_TEST_PLAN.md).
 
-## Pin map
+## Pin Map
 
-| NodeMCU | GPIO | Hướng | Mức ON / chức năng |
+| NodeMCU | GPIO | Hướng | Mức ON / Chức năng |
 |---|---|---|---|
-| D2 | 4 | OUT | 74HC595 SDI |
-| D3 | 0 | OUT | 74HC595 SCLK; phải HIGH khi boot |
-| D4 | 2 | OUT | 74HC595 LOAD; phải HIGH khi boot |
-| A0 | ADC | IN | NTC leg dưới; source dùng full-scale 3.3V theo bo hiện tại |
-| D6 | 12 | OUT | Bơm active-HIGH |
-| D5 | 14 | OUT | Van active-HIGH |
-| D7 | 13 | OUT | SSR active-HIGH, steady 3.3V logic, không PWM |
-| D0 | 16 | IN | SET LOW=nhấn; pull-up ngoài 10k |
-| D8 | 15 | IN | RUN HIGH=nhấn; pull-down ngoài 10k, boot LOW |
-| D1 | 5 | ISR IN | Flowmeter INPUT_PULLUP/FALLING; diagnostic only |
-| RX | 3 | OUT | LED SET HIGH qua R 1k |
-| TX | 1 | OUT | LED RUN HIGH qua R 1k |
+| D2 | 4 | OUT | 74HC595 SDI (dữ liệu nối tiếp hiển thị) |
+| D3 | 0 | OUT | 74HC595 SCLK (xung clock dịch); phải ở mức HIGH khi boot |
+| D4 | 2 | OUT | 74HC595 LOAD (xung chốt); phải ở mức HIGH khi boot |
+| A0 | ADC | IN | NTC nhánh dưới cầu phân áp; thang đo 0–3.3V |
+| D6 | 12 | OUT | Relay bơm (active-HIGH) |
+| D5 | 14 | OUT | Relay van điện từ (active-HIGH) |
+| D7 | 13 | OUT | SSR thanh nhiệt (active-HIGH), steady 3.3V logic (không PWM) |
+| D0 | 16 | IN | Nút SET (nhấn = LOW); có điện trở kéo lên ngoài 10k |
+| D8 | 15 | IN | Nút RUN (nhấn = HIGH); kéo xuống ngoài 10k, phải LOW khi boot |
+| D1 | 5 | ISR IN | Flowmeter (INPUT_PULLUP, ngắt FALLING); chỉ dùng cho chẩn đoán |
+| RX | 3 | OUT | LED SET (HIGH = sáng, qua điện trở 1k) |
+| TX | 1 | OUT | LED RUN (HIGH = sáng, qua điện trở 1k) |
 
-Không dùng GPIO6–11 (flash). Không đổi D8 sang INPUT_PULLUP hoặc giữ RUN khi reset. D0 dùng pull-up ngoài; firmware dùng INPUT.
+*Lưu ý GPIO*: Không sử dụng GPIO6–GPIO11 (kết nối SPI flash). Không đảo logic D8 sang INPUT_PULLUP hay nhấn giữ RUN khi cấp nguồn vì GPIO15 bắt buộc LOW lúc boot ESP8266.
 
-## Cụm và nguồn
+## Cụm mạch và Nguồn điện (v30)
 
-- Display 4x74HC595, segment active-LOW, bytes đảo trong production. TM1637 trong test/ là module khác. Các tên COMMON_CATHODE trong test cũ không mô tả chính xác polarity code.
-- Divider 3.3V → 10k → A0 → NTC → GND. Defaults R0 185000Ω, Beta 4890K (fit 2 điểm NTC mới 2026-09-30 21:06) + offset +15 (v11, 2026-09-30 22:39); R0/Beta trong EEPROM v5 hợp lệ có thể khác defaults.
-- ADC rail checks ≤0.02V hoặc ≥3.28V; plausibility −40…300°C trước offset. Median 7 mẫu/6ms và lọc alpha0.25. NTC publish invalid latch E1; chưa publish boot hoặc không có mẫu hợp lệ mới runtime 2s latch E3.
-- **Không còn cắt cứng mềm (v17).** Bảo vệ quá nhiệt dựa vào **cầu chì nhiệt/thermostat phần cứng độc lập**. Firmware chỉ thermostat quanh setpoint; E1 khi NTC ngoài dải.
-- Chu trình pha yêu cầu SSR ON cả khi bơm OFF trong soak; prime vẫn dùng pump-force. Nhưng BOOT_SAFE/fault/state lạ/mẫu stale khóa heater. Unknown FSM E8, storage buffer/commit failure E6: mọi actuator OFF.
-- SSR phải hỗ trợ kích 3.3V hoặc có driver phù hợp nguồn/input. Relay phải xác nhận active-HIGH. Bias phần cứng giữ mọi actuator OFF khi reset/unpowered; nguồn phải đủ khi ba tải cùng ON, mass low-voltage chung.
-- Mains cách ly low-voltage; sensor phải theo được nhiệt heater ở idle lẫn flowing. Thermal fuse và thermostat độc lập cần được xác minh trên thiết bị.
-- Flowmeter không quyết định liều, không có no-flow abort. Xác minh output điện (không đưa 5V push-pull vào GPIO).
-- GPIO1/3 dùng LED nên production không Serial.begin(). USB-UART có thể chọi RX; tách UART/LED đúng khi service. Test Serial không phải chế độ vận hành máy.
-
-Heater1400W theo chủ máy cung cấp ngày2026-10-01; chưa đo công suất/độ trễ NTC/overshoot trong lượt này. Hồi nhiệt v15 theo NTC sau lọc tới setpoint, không dự đoán nhiệt tích trữ.
-
-## Kiểm chứng
-
-[G09](../docs/QA_STATUS.md) đã compile/link với core 3.1.2 và kiểm tra ISR IRAM. G10 chưa đo wiring, nguồn, SSR trigger, calibration, overshoot, hydraulic hoặc power-loss; không coi source defaults là số đo mới.
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+- **Hiển thị**: 4 IC 74HC595 ghép tầng điều khiển 4 led 7 đoạn. Firmware quét lại khung hình mỗi 5 ms (`DISPLAY_REFRESH_MS`) để chống sai lệch dữ liệu do sụt áp/nhiễu EMI từ bơm, van và SSR.
+- **Mạch đo nhiệt NTC**:
+  - Cầu phân áp: `3.3V → R_SERIES (10k) → A0 → NTC → GND`.
+  - Tham số NTC mặc định: `R0 = 185000 Ω`, `Beta = 4890 K`, `offset = 0°C`.
+  - Lấy mẫu: 9 mẫu cách nhau 1 ms (~9 ms/cửa sổ), lọc trung vị kết hợp bù trễ đạo hàm `leadT` (cửa sổ 500 ms, `NTC_LEAD_S = 10s`).
+  - Debounce lỗi NTC: Cần 5 cửa sổ lỗi liên tiếp (`NTC_FAULT_DEBOUNCE = 5`) mới kích hoạt báo lỗi E1/E3.
+- **Bảo vệ nhiệt độ**:
+  - **Trần an toàn phần mềm 120°C (`HEAT_CAP_C`)**: Tự động ngắt SSR khi nhiệt độ đo chạm 120°C ngoài chu trình pha.
+  - **Cầu chì nhiệt độc lập**: Là lớp bảo vệ phần cứng tối cao chống cháy nổ nồi hơi.
+- **SSR và Relay**:
+  - SSR điều khiển thanh nhiệt 1400W, kích bằng mức logic 3.3V.
+  - Relay bơm và van cần có mạch bias phần cứng giữ mức LOW khi MCU khởi động hoặc mất nguồn.
+- **Giao tiếp UART / Telemetry**:
+  - Bản firmware chính thức không gọi `Serial.begin()` do chân TX/RX dùng cho 2 đèn LED hiển thị.
+  - Bản chẩn đoán `test/CoffeeMachineDebug` giải phóng 2 chân LED để bật UART truyền telemetry và nhận lệnh điều khiển cưỡng bức SSR.

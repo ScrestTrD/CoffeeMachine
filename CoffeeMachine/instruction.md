@@ -1,38 +1,71 @@
-# Hướng dẫn vận hành — source v15
+# Hướng dẫn thao tác và vận hành — Firmware v30
 
-Firmware trên máy chỉ thay đổi sau khi được nạp. Xem [QA_STATUS](../docs/QA_STATUS.md) trước khi xác nhận bản này đã nghiệm thu.
+Tài liệu chi tiết hướng dẫn thao tác máy pha cà phê sử dụng Firmware v30 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine.ino).
 
-## Khởi động
+## 1. Khởi động và trạng thái ban đầu
 
-BOOT_SAFE hiện 15 → sau mẫu NTC hợp lệ bơm chạy 5s, van đóng, 8888 và hai LED nháy 2Hz → đun (8888 nháy, RUN 1Hz) → sẵn sàng (0000, RUN steady). READY LED chuyển về trạng thái HEATING khi nhiệt lọc giảm dưới setpoint−2°C; đây không phải ngưỡng đóng/cắt SSR. Không giữ RUN khi reset vì GPIO15 phải LOW để boot.
+1. **Khởi động nguồn (`BOOT_SAFE`)**:
+   - Màn hình 7 đoạn 4 số hiển thị số phiên bản firmware: **30**.
+   - Hệ thống kiểm tra tính hợp lệ của cảm biến NTC (yêu cầu 2 cửa sổ đo ban đầu đồng thuận) và bộ nhớ EEPROM.
+2. **Mồi nước khởi động (`STARTUP_PRIME`)**:
+   - Bơm chạy trong 5 giây, van xả đóng (chạy tuần hoàn kín không xả nước ra ngoài).
+   - Màn hình hiển thị `8888` nháy cùng 2 đèn LED với tần số 2 Hz.
+3. **Gia nhiệt khởi động (`HEATING_IDLE`)**:
+   - Khi nhiệt độ dưới 80°C (`BLINK_BELOW_C`), màn hình nháy `8888`.
+   - Khi đạt từ 80°C trở lên, màn hình chuyển sang hiển thị `0000` tĩnh và tiếp tục đun cho đến khi đạt setpoint.
+   - Đèn LED RUN nháy chậm 1 Hz.
+4. **Sẵn sàng pha (`READY_IDLE`)**:
+   - Khi nhiệt độ thực tế đạt ngưỡng `setpoint - 2°C`, máy chuyển sang trạng thái sẵn sàng.
+   - Màn hình hiển thị `0000` tĩnh, đèn LED RUN sáng liên tục.
 
-## Pha preset
+*Lưu ý an toàn*: Không nhấn giữ nút RUN trong lúc bật nguồn hoặc reset, vì chân RUN kết nối với GPIO15 (yêu cầu kéo LOW lúc boot ESP8266).
 
-RUN vào chọn → SET đổi slot hợp lệ → RUN xác nhận. Máy ướt 2s, ngâm 2s, nén 2s rồi chiết. Màn hình đếm từ RUN; liều tính từ lúc mở van chiết. SET press hoặc RUN giữ 2s dừng ở bất kỳ pha preamble/chiết. Hết preset hoặc 60s chiết tự dừng. Không có preset hiện no, bấm để thoát.
+## 2. Pha cà phê theo Preset
 
-## Ghi preset
+1. **Chọn và xác nhận**:
+   - Từ trạng thái Idle, nhấn nút **RUN** để vào menu chọn preset. Màn hình hiển thị chỉ số preset (ví dụ `   1` hoặc `   2`). Nếu chưa có preset nào được lưu, màn hình hiện `  no`.
+   - Nhấn nút **SET** để chuyển đổi qua lại giữa các preset khả dụng.
+   - Nhấn nút **RUN** để bắt đầu chu trình pha.
+2. **Diễn tiến chu trình**:
+   - **Giai đoạn ngâm ủ (Preamble)**:
+     - *Wet (2s)*: Van mở, bơm chạy, SSR bật (làm ướt bột cà phê).
+     - *Soak (2s)*: Van đóng, bơm ngắt, SSR ngắt (ngâm ủ không ép nhiệt).
+     - *Press (2s)*: Van đóng, bơm chạy, SSR bật (tạo áp suất).
+   - **Giai đoạn chiết xuất (Extraction)**: Van mở, bơm chạy, SSR bật. Màn hình đếm giây chiết xuất.
+   - Khi hết thời gian chiết của preset (hoặc chạm giới hạn bảo vệ 60 giây), van và bơm tự động ngắt.
+3. **Dừng pha khẩn cấp**:
+   - Nhấn nhanh nút **SET** một lần, hoặc nhấn giữ nút **RUN** trong 2 giây tại bất kỳ thời điểm nào của chu trình để dừng pha ngay lập tức.
 
-SET giữ 3s → RUN chọn 1/2 → SET chốt → RUN bắt đầu. RUN lần nữa chốt số giây chiết; SET hủy. 0 giây không ghi đè. Hết 60s chiết tự dừng và hủy, không tự lưu. Lỗi lưu EEPROM E6 tắt mọi actuator; cần kiểm tra storage và ghi lại sau reset.
+## 3. Ghi nhớ Preset mới (Học thời gian chiết)
 
-## Xả và chỉnh nhiệt
+1. Từ trạng thái Idle, nhấn và **giữ nút SET trong 3 giây**.
+2. Màn hình nhấp nháy chỉ số preset (`   1` hoặc `   2`). Nhấn **RUN** để đổi slot cần ghi, nhấn **SET** để chọn slot.
+3. Đèn LED SET nháy nhanh, màn hình sáng tĩnh slot đã chọn. Nhấn **RUN** để bắt đầu chu trình chạy ghi nhớ (chạy qua đúng các pha ngâm ủ như khi pha thật).
+4. Khi lượng cà phê chiết xuất đã đạt yêu cầu:
+   - Nhấn nút **RUN** một lần để chốt dừng và lưu thời gian chiết xuất thực tế (không tính thời gian ngâm ủ preamble).
+   - Hoặc nhấn nút **SET** để hủy bỏ việc lưu mà không làm mất thời gian cũ.
+   - Nếu thời gian chiết vượt quá 60 giây, máy sẽ tự ngắt và hủy bỏ ghi nhớ.
 
-SET idle nhấn-nhả ≤0.7s vào xả. SET nhấn-nhả 100ms–<3s dừng; tự dừng 60s. RUN không điều khiển xả.
+## 4. Xả nước vệ sinh (Clean Flush)
 
-SET+RUN đủ 5s rồi nhả vào edit; RUN +1°C, SET −1°C trong 90–140°C. Giữ cả hai 300ms lưu; bỏ 20s không bấm hủy. Giá trị được snap 0.5°C; nếu không đổi thì không ghi EEPROM.
+- Từ trạng thái Idle, nhấn và nhả nhanh nút **SET** (thời gian giữ ≤ 700 ms).
+- Van và bơm cùng bật để xả nước vệ sinh đầu họng pha. Màn hình đếm số giây xả.
+- Dừng xả: Nhấn và nhả nhanh nút **SET** một lần nữa (thời gian giữ từ 100 ms đến dưới 3 giây), hoặc máy sẽ tự động ngắt sau 60 giây.
 
-## Đun trong pha và hồi nhiệt
+## 5. Chỉnh nhiệt độ cài đặt (Setpoint Edit)
 
-Trong pha/ghi preset, máy ép D7 ON liên tục qua cả wet/ngâm/nén/chiết (kể cả NTC lag/fault). **v22/v23: sau pha, đun theo nhiệt raw đẩy lên set + 10°C, giữ ổn định 5 giây, rồi handoff về thermostat setpoint (±0,5°C) để nồi nguội về set; boost không chạy lúc boot.** SET/RUN hold 2s dừng pha. Xả vệ sinh timeout 60s. Chỉnh setpoint 90–140°C bằng nút, không WiFi/PWM.
+1. Nhấn và **giữ đồng thời cả hai nút SET + RUN trong 5 giây**, sau đó nhả ra.
+2. Màn hình nhấp nháy giá trị nhiệt độ cài đặt hiện tại (ví dụ ` 93.0`).
+3. Điều chỉnh:
+   - Nhấn **RUN** để tăng +1.0°C.
+   - Nhấn **SET** để giảm −1.0°C.
+   - Dải nhiệt độ cho phép điều chỉnh: từ 90.0°C đến 140.0°C.
+4. Lưu và thoát:
+   - Nhấn và **giữ đồng thời cả hai nút SET + RUN trong 300 ms** để lưu giá trị mới vào flash EEPROM.
+   - Nếu không thao tác trong vòng 20 giây, hệ thống sẽ tự động thoát ra ngoài và hủy bỏ các thay đổi.
 
-Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi tắt; kết thúc ở98°C thì tắt ngay. Trong giám sát, xuống97.2°C đã bật lại. Sau xác nhận ổn định và trở về thermostat thì dưới97°C mới bật. Độ trễ vật lý NTC vẫn cần đo. Công suất1400W có thể gây tăng nhiệt tiếp sau khi tắt; chưa có đo thực nghiệm mới trong lượt này.
+## 6. Cơ chế hồi nhiệt sau pha & Trần an toàn (v30)
 
-## Lỗi và nhiệt
-
-E1 NTC invalid; E3 timeout mẫu boot/runtime; E6 EEPROM begin/save; E8 FSM state lạ. Fault latch mọi actuator OFF tới reset. Kiểm tra nguyên nhân trước reset. **Không còn cắt cứng mềm theo nhiệt độ (v17)** — bảo vệ quá nhiệt bằng cầu chì nhiệt/thermostat phần cứng.
-
-Chu trình pha yêu cầu gia nhiệt nhưng NTC/fault vẫn thắng. Thermal fuse/thermostat độc lập là bảo vệ quá nhiệt duy nhất; bench tests vẫn cần.
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+- **Hồi nhiệt sau pha**: Sau khi pha hoặc xả nước xong, máy tự động đẩy nhiệt độ lên mốc `setpoint + 10°C` theo nhiệt độ bù trễ đạo hàm `leadTemp()`, duy trì ổn định trong 5 giây rồi mới trả về thermostat kiểm soát thông thường.
+- **Trần bảo vệ phần mềm 120°C**: Khi không pha, nếu nhiệt độ đo đạt ngưỡng 120°C, SSR tự động bị ngắt để tránh tình trạng trôi nhiệt quá cao do sai số NTC vùng nhiệt độ cao.
+- **Mã lỗi an toàn (E1, E3, E6, E8)**: Khi có lỗi cảm biến hoặc bộ nhớ, mọi tải đóng ngắt đều bị ngắt và khóa an toàn. Cần kiểm tra phần cứng và tắt/bật lại nguồn để reset máy.

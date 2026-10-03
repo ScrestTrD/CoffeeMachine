@@ -1,28 +1,31 @@
 # CoffeeMachine
 
-Controller NodeMCU ESP8266 cho máy pha cà phê. Code chính thức: [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Code thử nghiệm nằm trong [test/](test/README.md).
+Controller NodeMCU ESP8266 cho máy pha cà phê. Code chính thức: [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Code thử nghiệm và chẩn đoán nằm trong [test/](test/README.md).
 
-## Phiên bản và trạng thái
+## Phiên bản và trạng thái (Firmware v30)
 
-Source v15 sửa các lỗi ẩn trên bản v14 đã duyệt: đun suốt pha kể cả soak, giám sát sau pha và chỉ trả về thermostat khi số đo ổn định 3 giây. Host114/114 và G09 pass; G10 hardware chưa chạy. Firmware trên thiết bị chưa được nạp lại trong lượt này. Xem [QA_STATUS](docs/QA_STATUS.md) để biết gate nào đã chạy; số version lúc boot không chứng minh binary trùng source.
+Phiên bản hiện hành: **v30** (`FW_VERSION = 30`).
+- **Trần an toàn phần mềm (`HEAT_CAP_C = 120°C`)**: Tự động ngắt SSR khi nhiệt độ đạt ngưỡng 120°C ở trạng thái không pha (bảo vệ chống trôi nhiệt cao do NTC đọc thiếu). Tự phục hồi khi nhiệt giảm. Cầu chì nhiệt phần cứng là chốt chặn cuối cùng.
+- **Bù trễ nhiệt đạo hàm (`leadT`)**: `leadT = rawT + NTC_LEAD_S * rate` (cửa sổ 500 ms, `NTC_LEAD_S = 10s`) giúp thermostat và hồi nhiệt phản ứng sớm trước quán tính nhiệt của nồi.
+- **Chu kỳ lấy mẫu NTC nhanh**: 9 mẫu × 1 ms (~9 ms/cửa sổ) giúp giảm độ trễ đo lường.
+- **Debounce lỗi NTC**: Cần 5 cửa sổ lỗi liên tiếp (`NTC_FAULT_DEBOUNCE = 5`) mới kích hoạt mã lỗi E1/E3, chống nhiễu đóng ngắt SSR.
+- **Tắt SSR trong 2s soak**: Trong pha soak của chu trình ngâm ủ preamble (bơm và van đều tắt), SSR cũng được tắt; SSR bật lại ở pha nén và chiết.
+- **Hồi nhiệt sau pha (`POST_BREW_BOOST_C = 10°C`)**: Sau khi kết thúc pha, hệ thống bù nhiệt đẩy lên `setpoint + 10°C`, giữ ổn định 5 giây (`RECOVERY_STABLE_MS = 5000`) theo `leadTemp()` rồi mới chuyển giao về thermostat bình thường.
 
-Repository gateway: /mnt/pc-dev/CoffeMachine, qua share //192.168.1.171/Develop. Đã xác minh trên PC .171: H:\Develop\CoffeMachine là repository tương ứng.
+Repository gateway: `/mnt/pc-dev/CoffeMachine`, qua share `//192.168.1.171/Develop`. PC .171: `H:\Develop\CoffeMachine`.
 
 ## Build và vận hành
 
-Mở sketch CoffeeMachine/CoffeeMachine.ino trong Arduino IDE. Dependencies: ESP8266 Arduino core (EEPROM đi kèm) và ShiftRegister74HC595 của Timo Denk. Đã target-build với ESP8266 core 3.1.2 và ShiftRegister74HC595 1.3.1; metadata CLI/compiler/library trong target-build-results.json. Kết quả này không thay G10.
+Mở sketch `CoffeeMachine/CoffeeMachine.ino` trong Arduino IDE.
+Dependencies:
+- ESP8266 Arduino core (kèm thư viện EEPROM)
+- `ShiftRegister74HC595` (Timo Denk)
 
+Tài liệu chi tiết:
 - [Hướng dẫn vận hành](HUONG_DAN_VAN_HANH.md)
 - [Tổng quan](CoffeeMachine/readme.md), [hardware](CoffeeMachine/hardware.md), [logic](CoffeeMachine/logic.md), [thao tác chi tiết](CoffeeMachine/instruction.md)
 - [Spec hiện hành](COFFE_README.md)
 - [Gates và test acceptance](docs/QA_GATES.md)
-- [Các lỗi ẩn đã sửa trong v15](docs/V15_HIDDEN_FIXES_2026-10-01.md)
-- [Rà soát từng khối — lịch sử trước giám sát](docs/HEAT_CONTROL_REVIEW_2026-10-01.md)
-- [Audit baseline v6](CODE_REVIEW_2026-09-30.md)
+- [QA Status](docs/QA_STATUS.md)
 
-Preview_AP.html là mockup lịch sử; source hiện hành không có WiFi AP, HTTP handler hoặc OTA. PID/PWM và dosing theo xung không thuộc implementation này.
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+Lưu ý: `Preview_AP.html` là mockup lịch sử; source hiện hành không có WiFi AP, HTTP handler hoặc OTA. Dosing theo timer giây (không phụ thuộc xung flowmeter trong điều khiển FSM).

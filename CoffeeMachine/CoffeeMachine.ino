@@ -2,124 +2,15 @@
   CoffeeMachine — NodeMCU ESP8266 coffee-machine controller.
   by Truong Cong Dinh 2026.09.03
 
-  v5 (2026-09-30):
-    - NTC_CAL_OFFSET_C = -18 C (readings ran uniformly hot; applied post-Beta).
-    - FW_VERSION shown on display during BOOT_SAFE. A different digit is
-      a version mismatch; a matching digit does not prove binary identity.
-  v6 (2026-09-30):
-    - ABS_OVERTEMP_C lowered 180 -> 145 C (SETPOINT_MAX auto 175 -> 140 C).
-  v7 (2026-09-30):
-    - Fault/state guards, recording timeout, live readiness and preamble abort.
-    - Fresh NTC watchdog, unfiltered overtemp guard and checked EEPROM saves.
-  v8 (2026-09-30 19:36):
-    - NTC refit from 3 live points vs reference thermometer (112/138/146 C):
-      R0 58000 -> 82000, Beta 3950 -> 3660, offset -18 -> 0. Residual <= 0.7 C
-      in 112..146 C. The old -18 offset was fitted on a mismatched report and
-      made high-temp readings worse; it is removed.
-    - CFG_VERSION 3 -> 4 to force defaults, so a stored old R0/Beta can never
-      survive the flash (presets must be re-recorded once).
-  v9 (2026-09-30 21:06):
-    - NTC refit on NEW sensor, 2 steady end points (owner: middle point noisy):
-      ref 32 C -> R 127211 ohm, ref 86 C -> R 11433 ohm.
-      R0 82000 -> 185000, Beta 3660 -> 4890. Exact at both ends; mid-point
-      (ref 98) predicted ~90 — re-verify with steady multi-point data.
-    - CFG_VERSION 4 -> 5 to force the new defaults (presets must be
-      re-recorded once).
-  v10 (2026-09-30 22:21):
-    - Display: re-push static 595 frame every 5 ms even when unchanged
-      (DISPLAY_REFRESH_MS). Heals latch corruption from relay/pump/SSR
-      sag/EMI faster than the eye can see. CFG unchanged (presets kept).
-  v11 (2026-09-30 22:39):
-    - NTC_CAL_OFFSET_C 0 -> +15 C: v9 fit reads uniformly ~15 LOW vs reference.
-      CFG unchanged (offset is a code const; stored R0/Beta stay valid).
-  v14 (2026-10-01):
-    - Brew heat covers the whole preset/recording cycle, including pump-off soak.
-    - On cycle end/abort, recover only while filtered NTC is below setpoint.
-      At/above setpoint stop immediately and clear the old thermostat request.
-    - Monitor after brew: OFF at set, ON below set; return to thermostat only
-      after fresh readings stay in [set, set+0.5 C] for 3 s; no timed heat boost.
-    - Keep v11 NTC calibration, fault codes, 145 C cutoff and EEPROM v5.
-  v16 (2026-10-03):
-    - NTC_CAL_OFFSET_C +15 -> 0 C: bench reports uniform +15 HIGH at all marks
-      vs reference, so the v11 trim now overshoots. v9 R0/Beta kept.
-      CFG unchanged (offset is a code const; stored R0/Beta stay valid).
-  v17 (2026-10-03 09:37):
-    - Remove the software 145 C hard cutoff (ABS_OVERTEMP_C): the boiler has an
-      independent thermal fuse, so the SSR no longer cuts on temperature. The
-      thermostat still regulates around the setpoint and an out-of-range NTC
-      reading still faults (E1 > 300 C). CFG unchanged.
-  v18 (2026-10-03 09:42):
-    - Brew heat is unconditional: D7 stays ON for the whole brew cycle even if
-      the NTC is stale/invalid, and for BREW_HEAT_HOLD_MS (5 s) after the cycle
-      ends, then the temperature is checked again. NTC fault latching is
-      suppressed inside that window. Thermal fuse is the hardware backstop.
-  v19 (2026-10-03 09:49):
-    - 8888 blink is boot-only plus a cold indicator: during heat-up it blinks
-      only while the boiler is below BLINK_BELOW_C (80 C); at/above 80 C it
-      shows 0000 and heats silently. Prime still blinks 8888 at boot.
-  v20 (2026-10-03 09:58):
-    - Post-brew recovery now keys on the calibrated RAW temperature (not the
-      lagging filtered value): D7 heats while raw < setpoint, so NTC/filter lag
-      can no longer leave the boiler cooling with D7 OFF. The 5 s hold stays as
-      the minimum.
-    - On handoff from recovery to the thermostat, seed heat ON when raw <
-      setpoint (Thermostat::requestHeat) to remove the sp-0.5 blind spot.
-  v21 (2026-10-03 10:03):
-    - NTC robustness: reject a physically impossible jump (> NTC_MAX_STEP_C)
-      between consecutive windows, and on cold start require two consecutive
-      agreeing windows before the first valid reading. A corrupt first ADC
-      window can no longer seed the filter and drive the boiler hot at boot.
-  v22 (2026-10-03 10:15):
-    - Post-brew behaviour changed: on leaving a brew, drive the boiler UP to
-      setpoint + POST_BREW_BOOST_C (20 C) and hold it stable there for
-      RECOVERY_STABLE_MS (5 s), then hand back to the normal setpoint
-      thermostat. Heating uses the calibrated raw temperature. The old
-      unconditional 5 s post-brew force-ON is removed (the boost target
-      replaces it); the fault-suppression window stays.
-      NOTE: target can reach setpoint_max(140) + 20 = 160 C — keep the
-      hardware thermal fuse as the backstop.
-  v23 (2026-10-03 10:25):
-    - Post-brew boost lowered 20 -> 10 C. First power-up behaviour unchanged
-      (the boost only runs after a brew cycle, never at boot).
-  v24 (2026-10-03 10:32):
-    - Boot guard: a software upper cap BOOT_HEAT_CAP_C = 150 C active only
-      from power-on until the first brew (then released so the post-brew boost
-      is not clipped). It holds the SSR off if the reading reaches the cap;
-      it is NOT a latched fault. Note: it reads the NTC, so a wrong reading at
-      boot can still escape it — the hardware thermal fuse remains the backstop.
-  v25 (2026-10-03 10:46):
-    - Replace the boot-only 150 C cap with a permanent safety cap HEAT_CAP_C =
-      120 C, active whenever NOT brewing (a brew always keeps heating). Bench
-      showed the NTC under-reads by ~24 C at high temperature (reading 146 while
-      the reference was 170), so the setpoint cannot be trusted as an upper
-      bound. The cap is a protective limit, not a setpoint, and auto-resumes
-      when the reading falls.
-  v26 (2026-10-03 11:03):
-    - NTC lag compensation (lead term). The sensor lags the real temperature in
-      both directions, so control now uses leadT = rawT + NTC_LEAD_S * rate
-      (rate C/s, smoothed, clamped). The thermostat, the post-brew recovery and
-      the 120 C cap act on leadT, so heat cuts early while rising and restarts
-      early while cooling. NTC_LEAD_S (default 10 s) is the tunable sensor time
-      constant; too high causes oscillation. A steady-state calibration error
-      (not lag) still needs a multi-point refit.
-  v27 (2026-10-03 11:10):
-    - Faster NTC window: NTC_SAMPLE_COUNT 7 -> 9, NTC_SAMPLE_SPACE_MS 6 -> 1,
-      so a reading takes ~9 ms instead of ~42 ms. Raw updates ~4.6x faster,
-      cutting measurement latency (the physical sensor lag remains).
-  v28 (2026-10-03 11:12):
-    - Estimate dT/dt over a fixed NTC_RATE_WINDOW_MS (500 ms) window instead of
-      between two consecutive readings. The fast v27 window made the 2-reading
-      rate dominated by quantization noise, so leadT swung +/-18 C even when
-      steady. The lead term is now stable.
-  v29 (2026-10-03 11:22):
-    - Debounce NTC faults: an isolated bad window (SSR-switching EMI is common
-      right when the heater cuts) no longer latches E1/E3. Only NTC_FAULT_DEBOUNCE
-      (5) consecutive bad windows raise the fault. Boot validation likewise only
-      latches a confirmed fault; a self-clearing glitch is ignored.
-  v30 (2026-10-03 11:40):
-    - During the brew preamble's 2 s soak phase (pump and valve already off) the
-      SSR is now OFF too; it resumes for the press/extraction phases. Other brew
-      phases still force D7 ON through faults/lag.
+  Firmware v30 (2026-10-03):
+    - Safety cap: permanent software upper cap HEAT_CAP_C = 120 C when not brewing.
+    - Thermal lag compensation (lead term): leadT = rawT + NTC_LEAD_S * rate (window 500 ms).
+    - Faster NTC sampling: 9 samples x 1 ms (~9 ms/window) for rapid responsiveness.
+    - NTC fault debounce: 5 consecutive bad windows required before latching E1/E3.
+    - Brew preamble: wet 2s (valve+pump+SSR ON), soak 2s (valve+pump+SSR OFF), press 2s (pump+SSR ON, valve OFF).
+    - Post-brew recovery: drive to setpoint + 10 C (POST_BREW_BOOST_C), hold 5s (RECOVERY_STABLE_MS)
+      based on leadTemp(), then hand off to setpoint thermostat.
+    - Display: 4x 74HC595 static frame re-push every 5 ms; shows FW_VERSION at boot.
 */
 
 #include <Arduino.h>

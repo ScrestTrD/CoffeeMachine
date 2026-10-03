@@ -1,44 +1,50 @@
-# CoffeeMachine — hướng dẫn vận hành
+# CoffeeMachine — Hướng dẫn vận hành (Firmware v30)
 
-Tài liệu theo source v15 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Source và firmware đang chạy là hai trạng thái cần xác minh riêng. [QA_STATUS](docs/QA_STATUS.md) ghi bằng chứng đã có.
+Tài liệu chuẩn theo source firmware v30 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino).
 
 ## Thao tác nhanh
 
 | Việc | Thao tác |
 |---|---|
 | Pha | RUN chọn → SET đổi preset → RUN xác nhận |
-| Dừng pha | SET press hoặc giữ RUN 2s; áp dụng cả preamble/chiết |
+| Dừng pha | SET press hoặc giữ RUN 2s (hỗ trợ cả trong preamble lẫn chiết) |
 | Ghi | SET giữ 3s → RUN đổi slot → SET chốt → RUN bắt đầu → RUN dừng/lưu; SET hủy |
 | Giới hạn ghi | 60s chiết tự dừng/hủy, không lưu; 0s không ghi đè |
-| Xả | SET nhấn-nhả ≤700ms; dừng bằng SET nhấn-nhả 100ms–<3s; tự dừng 60s |
-| Chỉnh nhiệt | SET+RUN 5s rồi nhả → RUN +1/SET −1°C → giữ cả hai 300ms lưu; timeout 20s hủy |
+| Xả vệ sinh | SET nhấn-nhả ≤700ms; dừng bằng SET nhấn-nhả 100ms–<3s; tự dừng sau 60s |
+| Chỉnh nhiệt | SET+RUN giữ 5s rồi nhả → RUN +1°C / SET −1°C → giữ cả hai nút 300ms để lưu; timeout 20s hủy |
 
-BOOT_SAFE hiện 15; prime/đun hiện 8888 nháy; READY hiện 0000/RUN steady và tính lại theo nhiệt. Dosing được phép từ heating idle, nên chờ READY nếu cần nhiệt ổn định.
+- Khi khởi động, màn hình `BOOT_SAFE` hiển thị số phiên bản: **30**.
+- Khởi động prime / đun ban đầu: hiển thị `8888` nháy khi nhiệt độ dưới 80°C (`BLINK_BELOW_C`), trên 80°C hiển thị `0000` đun tĩnh.
+- Trạng thái sẵn sàng (`READY`): hiển thị `0000`, đèn `RUN LED` sáng liên tục (steady ON).
 
-## Đun trong pha và hồi nhiệt
+## Chu trình đun và hồi nhiệt (v30)
 
-Trong pha/ghi preset, máy yêu cầu đun liên tục qua cả wet/ngâm/nén/chiết; lỗi NTC vẫn ưu tiên. Sau dừng/kết thúc/hủy/timeout/xả, nếu NTC sau lọc dưới nhiệt cài đặt thì tiếp tục đun; nếu đã đạt/vượt thì tắt ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không ép đun thêm vài giây.
+1. **Trong chu trình pha (Preamble & Chiết)**:
+   - Pha 1 (Wet 2s): Bơm ON, Van ON, SSR ON.
+   - Pha 2 (Soak 2s): Bơm OFF, Van OFF, SSR OFF (ngắt đun để ngâm ủ tự nhiên).
+   - Pha 3 (Press 2s): Bơm ON, Van OFF, SSR ON (nén áp suất).
+   - Pha 4 (Chiết): Bơm ON, Van ON, SSR ON liên tục.
+   - Trong suốt các pha có đun, SSR được ép ON bất chấp độ trễ NTC nhằm bù tụt nhiệt khi nước lạnh cấp vào nồi. Cầu chì nhiệt phần cứng là chốt bảo vệ độc lập.
 
-Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi tắt; kết thúc ở98°C thì tắt ngay. Trong giám sát, xuống97.2°C đã bật lại. Sau xác nhận ổn định và trở về thermostat thì dưới97°C mới bật. Độ trễ vật lý NTC vẫn cần đo. Công suất1400W có thể gây tăng nhiệt tiếp sau khi tắt; chưa có đo thực nghiệm mới trong lượt này.
+2. **Hồi nhiệt sau pha (`POST_BREW_BOOST_C = 10°C`)**:
+   - Sau khi kết thúc hoặc dừng pha, hệ thống tự động kích hoạt chế độ hồi nhiệt: nâng nhiệt độ nồi lên mốc `setpoint + 10°C`.
+   - Điều khiển theo nhiệt độ bù trễ đạo hàm `leadTemp()` (`leadT = rawT + NTC_LEAD_S * rate`).
+   - Duy trì ổn định tại ngưỡng boost trong 5 giây (`RECOVERY_STABLE_MS = 5000`) trước khi bàn giao lại cho thermostat thông thường (`setpoint ± 0.5°C`).
 
-## Mã và bảo vệ
+3. **Trần an toàn phần mềm (`HEAT_CAP_C = 120°C`)**:
+   - Ở các trạng thái không pha, nếu nhiệt độ đo đạt ngưỡng 120°C, SSR tự động ngắt để bảo vệ quá nhiệt (chống trôi nhiệt cao do NTC đọc thiếu). Hệ thống tự phục hồi đun khi nhiệt độ hạ xuống dưới ngưỡng.
 
-E1 NTC invalid, E3 timeout mẫu 2s, E6 storage init/save thất bại, E8 FSM state lạ. Fault latch tắt SSR/bơm/van đến reset. no nghĩa là chưa có preset hợp lệ.
+## Mã lỗi và bảo vệ
 
-Không còn cắt cứng mềm theo nhiệt độ (v17): bảo vệ quá nhiệt là cầu chì nhiệt/thermostat phần cứng độc lập. Firmware chỉ thermostat quanh setpoint; NTC ngoài dải latch E1. Không coi calibration là chứng nhận nhiệt boiler.
+- **E1**: Lỗi cảm biến NTC ngoài dải cho phép (đã qua debounce 5 cửa sổ xấu liên tiếp).
+- **E3**: Timeout đọc mẫu NTC (quá 2 giây không có mẫu mới).
+- **E6**: Lỗi khởi tạo hoặc ghi lưu bộ nhớ EEPROM.
+- **E8**: Trạng thái FSM không hợp lệ.
+- **"no"**: Chưa có preset hợp lệ được cài đặt.
 
-## Hiệu chuẩn và service
+Khi xảy ra lỗi (E1/E3/E6/E8), toàn bộ actuator (bơm, van, SSR) lập tức ngắt hoàn toàn (fail-closed) và khóa cứng cho đến khi khởi động lại máy.
 
-- NTC defaults 185000Ω/Beta 4890/offset +15 (v11: fit 2 điểm + bù đọc thấp đều 15, 2026-09-30 22:39); config EEPROM v5 hợp lệ giữ R0/Beta riêng.
-- [test/NtcTempMonitor/](test/NtcTempMonitor/) quan sát defaults/filter; không đại diện config EEPROM custom hoặc toàn bộ safety logic.
-- [test/NTC_Temperature.txt](test/NTC_Temperature.txt) là sketch hiệu chuẩn tham chiếu dùng Serial, defaults 100k và không offset. Khi fit lại R0/Beta phải cập nhật cấu hình có chủ đích (đổi CFG_VERSION để ép defaults), không cộng bù hai lần.
-- Sketch test không thay firmware production và không tự giữ tất cả actuator OFF. Tách tải trước service. GPIO TX/RX chia sẻ LED, không để UART bridge chọi tín hiệu khi vận hành.
-- AP/HTTP/OTA chưa triển khai; Preview_AP.html chỉ mockup cũ.
-- Wiring/fuse/SSR/NTC đa điểm/power-loss cần các [gate hardware](docs/QA_GATES.md); lượt này không nạp chip hoặc chạy máy.
+## Cấu hình cảm biến và lưu trữ
 
-[Hướng dẫn chi tiết](CoffeeMachine/instruction.md).
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+- Cảm biến NTC: Mặc định `R0 = 185000 Ω`, `Beta = 4890`, `offset = 0°C`. Cửa sổ lấy mẫu nhanh 9 mẫu × 1 ms (~9 ms).
+- Bộ nhớ EEPROM: Chuẩn `CFG_VERSION = 5`, lưu trữ setpoint nhiệt độ và 2 slot preset thời gian chiết (giây).

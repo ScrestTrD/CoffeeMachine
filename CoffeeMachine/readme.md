@@ -1,34 +1,37 @@
-# CoffeeMachine — firmware v23
+# CoffeeMachine — Firmware v30
 
-Source controller NodeMCU ESP8266: [CoffeeMachine.ino](CoffeeMachine.ino). Source đã sửa và pass host/target gates G01–G09; xem [QA_STATUS](../docs/QA_STATUS.md) cho trạng thái kiểm chứng.
+Source controller NodeMCU ESP8266: [CoffeeMachine.ino](CoffeeMachine.ino). Code thử nghiệm và chẩn đoán nằm trong [test/](../test/README.md).
 
-## Chức năng
+## Chức năng chính (v30)
 
-Thermostat ON/OFF 1°C hysteresis; chu trình pha ép D7 ON (kể cả soak bơm OFF, bỏ qua NTC lag/fault). **v22/v23:** sau khi kết thúc pha, đun theo **nhiệt raw đã bù** đẩy lên **set + 10°C** (`POST_BREW_BOOST_C`), giữ ổn định tại mốc đó **5s** (`RECOVERY_STABLE_MS`), rồi handoff về thermostat setpoint thường (`set±0.5`) để nồi nguội về set. **Boost chỉ chạy sau pha, không chạy lúc boot lần đầu.** NTC median 7 mẫu/6ms, Beta conversion (R0 185000/Beta 4890, fit 2 điểm NTC mới), offset 0, low-pass alpha 0.25. **Không còn cắt cứng mềm theo nhiệt độ (v17)** — bảo vệ quá nhiệt do cầu chì nhiệt/thermostat phần cứng; chỉ còn thermostat quanh setpoint và E1 khi NTC ngoài dải. NTC/fault/storage/state lạ luôn thắng UI.
+- **Thermostat điều nhiệt**: Cơ chế ON/OFF với hysteresis 1°C quanh setpoint (`setpoint ± 0.5°C`).
+- **Bù trễ nhiệt đạo hàm (`leadT`)**: Tính toán theo công thức `leadT = rawT + NTC_LEAD_S * rate` (đo trên cửa sổ 500 ms, hằng số thời gian `NTC_LEAD_S = 10s`). Giúp phát hiện sớm xu hướng tăng/giảm nhiệt để cắt và đóng SSR kịp thời.
+- **Trần an toàn phần mềm (`HEAT_CAP_C = 120°C`)**: Khi không ở trong trạng thái pha, SSR tự động bị cắt nếu nhiệt độ chạm ngưỡng 120°C (phòng ngừa trôi nhiệt cao do đặc tính NTC đọc thiếu). Tự động phục hồi khi nhiệt độ hạ xuống dưới ngưỡng.
+- **Chu trình ngâm ủ & pha chiết (Preamble)**:
+  - Wet (2s): Van ON, Bơm ON, SSR ON.
+  - Soak (2s): Van OFF, Bơm OFF, SSR OFF (v30 ngắt nhiệt trong giai đoạn ngâm ủ).
+  - Press (2s): Van OFF, Bơm ON, SSR ON.
+  - Extraction: Van ON, Bơm ON, SSR ON liên tục.
+- **Hồi nhiệt sau pha (Post-Brew Recovery)**: Sau khi kết thúc pha, hệ thống bù nhiệt đẩy lên `setpoint + 10°C` (`POST_BREW_BOOST_C = 10.0f`), duy trì ổn định trong 5 giây (`RECOVERY_STABLE_MS = 5000`) theo nhiệt độ `leadTemp()` rồi mới chuyển giao về thermostat thông thường.
+- **Lấy mẫu & Debounce NTC**: 9 mẫu × 1 ms (~9 ms/cửa sổ); yêu cầu 5 cửa sổ xấu liên tiếp (`NTC_FAULT_DEBOUNCE = 5`) mới kích hoạt lỗi E1/E3 để tránh nhiễu do đóng ngắt SSR.
+- **Giao diện & Hiển thị**: Led 7 đoạn 4 số qua 4 IC 74HC595 (quét lại khung hình tĩnh mỗi 5 ms). Hiển thị số phiên bản `30` khi khởi động (`BOOT_SAFE`).
+- **Dosing**: 2 preset thời gian chiết (tính bằng giây từ lúc mở van chiết, giới hạn tối đa 60 giây).
 
-2 preset giây chiết, preamble 2+2+2s; 60s giới hạn pha chiết và ghi preset. Recording timeout hủy, không ghi đè. SET và RUN hold 2s dừng pha từ preamble. Xả vệ sinh có timeout 60s. Chỉnh setpoint 90–140°C bằng nút, không WiFi/PWM.
-
-READY được tính lại mỗi tick; HEATING hiện 8888 nháy, READY hiện 0000. FW_VERSION hiện lúc BOOT_SAFE; version không thay hash binary.
-
-Kết thúc pha/ghi/hủy/timeout/xả: nhiệt lọc <setpoint thì tiếp tục hồi nhiệt, ≥setpoint thì tắt ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không đun bù theo timer. Prime và các màn hình chọn không arm hồi nhiệt.
-
-## Kiến trúc
+## Kiến trúc hệ thống
 
 | Khối | Vai trò |
 |---|---|
-| Display | Frame 4 digit, active-LOW, shift khi đổi và refresh mỗi5ms khi commit frame |
-| Button | Debounce 25ms + queue pressed/released/held |
-| NtcSensor | Mẫu hợp lệ, tuổi mẫu, raw đã bù và nhiệt lọc |
-| FlowSensor | ISR diagnostic; không quyết định dosing |
-| Persistence | EEPROM v5 + CRC/semantic validation + trạng thái save |
-| Thermostat | ON/OFF, dead-band 1°C |
-| CoffeeMachine | FSM, safety supervisor, UI và actuator |
+| `Display` | Quản lý khung hình 4 digit, giải mã 7-segment active-HIGH (common-cathode), refresh liên tục mỗi 5 ms chống nhiễu latch |
+| `Button` | Debounce 25 ms, hàng đợi sự kiện (pressed / released / held) cho nút SET và RUN |
+| `NtcSensor` | Lấy mẫu ADC, chuyển đổi điện trở NTC, tính toán `rawTemp`, `controlTemp` (lọc thông thấp), và `leadTemp` (bù trễ đạo hàm); debounce lỗi |
+| `FlowSensor` | Đếm xung ngắt IRAM phục vụ chẩn đoán (không can thiệp quyết định liều pha trong FSM) |
+| `Persistence` | Lưu trữ EEPROM v5, kiểm tra toàn vẹn CRC32, setpoint và 2 preset giây chiết |
+| `Thermostat` | Điều khiển đóng/cắt SSR theo setpoint với dead-band 1°C |
+| `CoffeeMachine` | FSM điều khiển luồng hoạt động, giám sát an toàn (fail-closed), đồng bộ actuator và đèn LED |
 
-EEPROM v5 hợp lệ giữ calibration/preset; không tự reset calibration khi defaults source đổi — ngoại lệ một lần v9: lên version 5 để ép defaults mới (R0 185000/Beta 4890) vì giá trị cũ đã biết sai, preset phải ghi lại. Config invalid về defaults; EEPROM init/commit failure latch E6. E1 NTC invalid, E3 timeout, E8 state lạ. Overtemp không latch, chỉ cắt SSR.
-
-[Hardware](hardware.md), [logic](logic.md), [instruction](instruction.md), [spec](../COFFE_README.md), [gates](../docs/QA_GATES.md), [audit baseline v6](../CODE_REVIEW_2026-09-30.md).
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+Tài liệu liên quan:
+- [Hardware](hardware.md)
+- [Logic](logic.md)
+- [Instruction](instruction.md)
+- [Spec COFFE_README](../COFFE_README.md)
+- [QA Status](../docs/QA_STATUS.md)

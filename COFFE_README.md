@@ -1,73 +1,68 @@
-# CoffeeMachine — đặc tả hiện hành
+# CoffeeMachine — Đặc tả kỹ thuật hiện hành (Firmware v30)
 
-Cập nhật 2026-10-01. Source v15 đã triển khai; trạng thái thực hiện và kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md). Tài liệu này thay đặc tả trộn PID/xung/AP cũ; [audit v6](CODE_REVIEW_2026-09-30.md) giữ lịch sử findings.
+Cập nhật 2026-10-03 theo Firmware v30 [CoffeeMachine/CoffeeMachine.ino](CoffeeMachine/CoffeeMachine.ino). Trạng thái kiểm chứng nằm trong [QA_STATUS](docs/QA_STATUS.md).
 
-## Hardware
+## 1. Phần cứng (Hardware)
 
-NodeMCU ESP8266; [pin map và wiring](CoffeeMachine/hardware.md) là tham chiếu. D6/GPIO12 bơm, D5/GPIO14 van, D7/GPIO13 SSR, active-HIGH. D0 SET active-LOW với pull-up ngoài; D8 RUN active-HIGH với pull-down ngoài. Display 4x74HC595 active-LOW trên D2/D3/D4; không phải TM1637. GPIO1/3 là LED, production không gọi Serial.begin().
+NodeMCU ESP8266 (ESP-12E); [pin map và wiring](CoffeeMachine/hardware.md) là tài liệu tham chiếu chi tiết:
+- D6/GPIO12: Bơm (active-HIGH).
+- D5/GPIO14: Van điện từ (active-HIGH).
+- D7/GPIO13: SSR thanh nhiệt (active-HIGH), logic 3.3V tĩnh, không PWM.
+- D0/GPIO16: Nút SET (active-LOW, điện trở pull-up ngoài 10k).
+- D8/GPIO15: Nút RUN (active-HIGH, điện trở pull-down ngoài 10k, bắt buộc LOW khi boot).
+- D2/D3/D4: Mạch hiển thị 4x 74HC595 (SDI, SCLK, LOAD).
+- RX (GPIO3) và TX (GPIO1): Đèn LED SET và RUN (active-HIGH qua điện trở 1k). Bản production không gọi `Serial.begin()`.
+- A0: ADC đọc cảm biến NTC 100k (cầu phân áp với R_SERIES 10k lên 3.3V).
+- D1/GPIO5: Tín hiệu flowmeter (ngắt FALLING, chỉ dùng cho chẩn đoán).
 
-Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng phải giữ relay/SSR OFF khi MCU reset/unpowered. SSR trigger 3.3V, nguồn, isolation, NTC location, thermal fuse và thủy lực cần nghiệm thu G10; firmware không thay bảo vệ nhiệt độc lập.
+## 2. Kiểm soát nhiệt độ (Thermostat & An toàn v30)
 
-## Nhiệt
+- **Thermostat**: Bật SSR khi `leadTemp < setpoint − 0.5°C`, tắt SSR khi `leadTemp >= setpoint + 0.5°C` (dead-band 1.0°C).
+- **Dải nhiệt độ**: Mặc định 97.5°C; cho phép cài đặt 90.0–140.0°C (bước nhảy snap 0.5°C).
+- **Cảm biến NTC**: Mặc định `R0 = 185000 Ω`, `Beta = 4890 K`, `offset = 0°C`.
+  - Cửa sổ lấy mẫu: 9 mẫu ADC cách nhau 1 ms (~9 ms/cửa sổ).
+  - Lọc thông thấp kết hợp tính bù trễ đạo hàm: `leadT = rawT + NTC_LEAD_S * rate` (cửa sổ 500 ms, `NTC_LEAD_S = 10s`).
+  - Debounce lỗi NTC: Yêu cầu 5 cửa sổ xấu liên tiếp (`NTC_FAULT_DEBOUNCE = 5`) trước khi báo lỗi E1/E3.
+  - Khởi động lạnh yêu cầu 2 cửa sổ đo liên tiếp đồng thuận chênh lệch ≤ 15°C mới nhận dữ liệu.
+- **Trần an toàn phần mềm (`HEAT_CAP_C = 120°C`)**:
+  - Khi không pha, nếu nhiệt độ đo đạt 120°C, SSR tự động bị ngắt nhằm chống trôi nhiệt cao do sai số NTC. Tự phục hồi khi nhiệt độ hạ xuống.
+  - Cầu chì nhiệt vật lý độc lập là lớp bảo vệ quá nhiệt tối cao.
+- **Chu trình pha & ngâm ủ**:
+  - Wet (2s): Bơm ON, Van ON, SSR ON.
+  - Soak (2s): Bơm OFF, Van OFF, SSR OFF (v30 ngắt SSR trong giai đoạn ngâm ủ).
+  - Press (2s): Bơm ON, Van OFF, SSR ON.
+  - Chiết: Bơm ON, Van ON, SSR ON.
+  - Duy trì ép bật SSR trong các pha pha chiết và hoãn bắt lỗi NTC 5 giây sau pha (`BREW_HEAT_HOLD_MS = 5000`).
+- **Hồi nhiệt sau pha**: Đẩy nhiệt độ lên `setpoint + 10°C` (`POST_BREW_BOOST_C = 10.0f`), duy trì ổn định 5 giây (`RECOVERY_STABLE_MS = 5000`) theo `leadTemp()` rồi mới chuyển giao về thermostat.
 
-- Thermostat ON dưới setpoint−0.5°C, OFF từ setpoint+0.5°C; không PWM/PID.
-- Default 97.5°C; miền 90–140°C; snap 0.5°C, nút edit bước 1°C.
-- NTC defaults R0=185000Ω, Beta=4890K (fit 2 điểm NTC mới 32/86°C, 2026-09-30 21:06), divider 10k, A0 full-scale giả định theo bo này 3.3V.
-- 7 ADC samples cách 6ms, median rồi Beta (R0 185000/Beta 4890) + offset +15 (v11, đọc thấp đều 15); alpha=0.25 cho nhiệt điều khiển.
-- **Không còn cắt cứng mềm theo nhiệt độ (v17).** Bảo vệ quá nhiệt bằng cầu chì nhiệt/thermostat phần cứng độc lập; firmware chỉ thermostat quanh setpoint.
-- Trong pha preset/ghi preset, SSR được yêu cầu ON suốt wet/soak/press/extraction, kể cả bơm OFF trong soak. Xả cũng yêu cầu đun suốt lúc chạy.
-- Kết thúc/dừng/hủy/timeout chu trình: NTC sau lọc <setpoint thì hồi nhiệt; ≥setpoint thì SSR OFF ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không có khoảng ép đun cố định hoặc mục tiêu +1/+2°C.
-- Safety permission luôn thắng: fault, freshness, BOOT_SAFE/state lạ. Prime giữ pump-force/thermostat; hủy chọn trước khi pha không arm hồi nhiệt.
-- Mẫu đầu phải hợp lệ trước prime. Không có publish lúc boot trong 2s: E3; ADC hở/chập/ngoài −40…300°C trước offset: E1. Sau startup, 2s không có mẫu hợp lệ mới: E3.
-- State lạ: E8; fault latch luôn tắt mọi actuator đến reset.
+## 3. Trình tự hoạt động và Giao diện (UI)
 
-## Trình tự và UI
-
-| State/chế độ | Hành vi |
+| Trạng thái | Hành vi chi tiết |
 |---|---|
-| BOOT_SAFE | Tất cả OFF, hiện FW_VERSION; đợi NTC và storage init |
-| STARTUP_PRIME | 5s bơm ON/van đóng; gia nhiệt được phép, 8888 và 2 LED nháy 2Hz |
-| HEATING_IDLE | 8888 nháy 2Hz, RUN LED 1Hz |
-| READY_IDLE | 0000, RUN steady; tính lại readiness mỗi tick |
-| READY criteria | NTC hợp lệ/còn mới, không fault, control temp ≥setpoint−2°C |
-| Chọn pha | RUN từ idle, SET đổi preset hợp lệ, RUN xác nhận; không có preset hiện no |
-| Preamble | 2s van+bơm ON → 2s bơm/van OFF → 2s bơm ON/van đóng; SSR vẫn yêu cầu ON qua safety |
-| RUN_ACTIVE | Thời gian liều tính từ mở van chiết; màn hình tính từ RUN bắt đầu |
-| Dừng pha | SET press hoặc RUN giữ 2s, cả preamble và chiết |
-| Ghi preset | SET giữ 3s → RUN đổi slot → SET chốt → RUN bắt đầu → RUN dừng/lưu; SET hủy |
-| Recording limit | 60s chiết: dừng/hủy, không ghi đè; 0s không lưu |
-| CLEAN_FLUSH | SET idle nhấn-nhả ≤700ms; bơm+van ON, 2 LED steady; SET nhấn-nhả 100ms–<3s dừng; tự dừng 60s |
-| SETPOINT_EDIT | SET+RUN 5s rồi nhả; RUN +1/SET −1; giữ cả hai 300ms lưu; bỏ 20s hủy |
+| `BOOT_SAFE` | Tất cả actuator OFF, màn hình hiển thị số phiên bản `30`. Chờ khởi tạo sensor và bộ nhớ |
+| `STARTUP_PRIME` | 5 giây bơm chạy mồi nước tuần hoàn (van đóng); hiển thị `8888` nháy cùng 2 LED 2 Hz |
+| `HEATING_IDLE` | Gia nhiệt khởi động: nháy `8888` khi < 80°C; hiển thị `0000` tĩnh khi ≥ 80°C. Đèn RUN nháy 1 Hz |
+| `READY_IDLE` | Nhiệt độ đạt ngưỡng sẵn sàng (`>= setpoint - 2°C`). Hiển thị `0000`, đèn RUN sáng liên tục |
+| Chọn pha | Nhấn RUN từ idle, dùng SET đổi preset, RUN xác nhận để bắt đầu; nếu chưa có preset hiện `  no` |
+| Preamble | Wet 2s (Bơm+Van+SSR ON) → Soak 2s (Bơm+Van+SSR OFF) → Press 2s (Bơm+SSR ON, Van OFF) |
+| `RUN_ACTIVE` | Van mở, bơm chạy, SSR chạy. Đếm thời gian chiết xuất thực tế (tối đa 60 giây) |
+| Dừng pha | Nhấn SET một lần hoặc giữ RUN 2 giây tại bất kỳ thời điểm nào của chu trình |
+| Ghi preset | Giữ SET 3s → RUN chọn slot → SET chốt → RUN bắt đầu → RUN lưu / SET hủy |
+| `CLEAN_FLUSH` | SET nhấn-nhả ≤ 700 ms; bơm và van cùng mở xả nước. Dừng bằng cách nhấn SET hoặc tự ngắt sau 60 giây |
+| `SETPOINT_EDIT` | Giữ SET+RUN trong 5 giây; RUN tăng +1°C, SET giảm −1°C; giữ cả hai 300 ms để lưu |
 
-Cho phép bắt đầu liều từ heating idle, không có ready gate bắt buộc. Idle sau hủy/xong tính lại nhiệt. Queue và guard release tránh nút dừng tiếp tục kích xả ở idle. Các timer phải dùng unsigned subtraction để chịu millis rollover; timestamp bằng 0 không được dùng để kết luận “chưa chiết”.
+## 4. Cấu hình EEPROM (v5)
 
-Nếu vừa kết thúc pha mà nhiệt lọc còn cao, SSR OFF theo số đo đã duyệt. Trong giám sát sau pha, nhiệt lọc dưới set thì bật lại ngay; không bảo đảm loại bỏ độ trễ nhiệt của cảm biến. Heater1400W (chủ máy cung cấp) có thể tiếp tục tăng nhiệt sau SSR OFF. Xác minh thực tế bằng G10.
+- Sử dụng cấu trúc `PersistentConfig` với CRC32, `CFG_MAGIC = 0x434F4545UL` ("COEE"), `CFG_VERSION = 5`.
+- Lưu trữ setpoint nhiệt độ, tham số NTC R0/Beta, và 2 slot preset thời gian chiết (1–60 giây).
+- Dữ liệu hỏng hoặc không hợp lệ sẽ tự động nạp giá trị mặc định an toàn. Lỗi khởi tạo hoặc ghi lưu EEPROM sẽ kích hoạt mã lỗi E6 và ngắt toàn bộ actuator.
 
-## EEPROM
+## 5. Bảng mã lỗi (Fault Codes)
 
-Giữ layout/version 5, magic/size/CRC. Config hợp lệ còn phải có setpoint hữu hạn trong miền, R0 1000–1000000Ω và Beta 800–6000K hữu hạn, lastPreset 0–2, valid flag 0/1; preset hợp lệ từ 1–60s. Đây là miền kiểm tra input, không chứng nhận calibration.
-
-Config invalid/legacy khác layout/preset vượt miền: defaults và không tự ghi flash. Config v5 hợp lệ giữ calibration và preset; load snap setpoint 0.5. Đổi defaults source không tự thay config đang lưu — ngoại lệ một lần v9 (lên version 5 ép defaults vì R0/Beta cũ đã biết sai). Khi hiệu chuẩn lại phải đồng bộ R0/Beta có chủ đích.
-
-EEPROM buffer setup (length/pointer) hoặc commit failure: E6, mọi actuator OFF. begin() của core trả void và không expose flashRead status, nên không cam kết phát hiện mọi lỗi đọc flash. Chỉ commit khi xác nhận thay đổi; hoàn tất pha cùng lastPreset không ghi lại. Không write mỗi loop.
-
-## Mã lỗi
-
-| Mã | Nghĩa |
-|---|---|
-| E1 | NTC ADC/giá trị không hợp lệ |
-| E3 | Timeout mẫu NTC boot/runtime |
-| E6 | EEPROM init/save thất bại |
-| E8 | FSM state không hợp lệ |
-| no | Không có preset hợp lệ; không phải fault |
-
-Fault không tự clear khi UI đổi. Không có cắt cứng mềm theo nhiệt độ (v17); quá nhiệt do cầu chì nhiệt/thermostat phần cứng xử lý.
-
-## Gates
-
-[G01–G08](docs/QA_GATES.md) kiểm chứng logic bằng host mocks. G09 compile/link thật với ESP8266, kiểm tra IRAM; G10 đo wiring/reset, sensor, hydraulic, heater/overshoot/fuse, persistence/power loss. Không đóng G09/G10 bằng host test. Các sketch linh kiện trong test/ không tự tắt đầy đủ actuator và không phải firmware vận hành.
-
-
-V15: xác nhận 3 giây còn yêu cầu biên độ toàn cửa sổ ≤0,10°C và giảm từ đỉnh ≤0,05°C; vượt ngưỡng thì tính lại. Đây là dung sai phần mềm chưa kiểm chứng nhiễu NTC thực. SSR vẫn bật dưới set/tắt từ set; không ép đun theo timer. Giảm chậm hơn dung sai vẫn có thể được coi là ổn định; không dự đoán nhiệt tương lai.
-
-Setpoint mới và SSR được áp dụng trước ghi flash; giữ hai nút lưu được tính là hoạt động để không bị timeout20s hủy. Chuyển HEATING↔READY giữ timer/nút; guard chống release sau STOP vẫn giữ ở các đường kết thúc chu trình.
+| Mã | Ý nghĩa | Xử lý |
+|---|---|---|
+| **E1** | Cảm biến NTC hở/chập/ngoài dải cho phép (đã qua debounce 5 cửa sổ) | Latch lỗi, ngắt toàn bộ tải |
+| **E3** | Quá thời gian chờ mẫu NTC mới (timeout 2 giây) | Latch lỗi, ngắt toàn bộ tải |
+| **E6** | Lỗi khởi tạo hoặc ghi lưu EEPROM thất bại | Latch lỗi, ngắt toàn bộ tải |
+| **E8** | Trạng thái máy FSM không hợp lệ | Latch lỗi, ngắt toàn bộ tải |
+| **no** | Chưa có preset hợp lệ được cài đặt | Bấm phím bất kỳ để thoát về idle |
