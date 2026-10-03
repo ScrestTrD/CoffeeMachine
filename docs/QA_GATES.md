@@ -10,7 +10,7 @@ Cập nhật 2026-10-01. Hành vi mục tiêu: firmware v15. Các test host dùn
 | G04 | CM-004 | SET hoặc RUN giữ 2s dừng cả preamble và RUN_ACTIVE; không tự chạy/xả lại sau dừng | Host debounce/gesture sequences |
 | G05 | CM-005 | NTC boot và runtime timeout ở 2s; open/short/NaN latch; tính tuổi mẫu đúng khi millis wrap | Host sampling/fake clock |
 | G06 | CM-006 | Kiểm tra CRC/layout/giá trị hữu hạn/miền/preset; load snap 0.5; commit failure E6; config v5 hợp lệ giữ calibration/preset; restart bền | Host flash mock, fault injection |
-| G07 | CM-007 | Nhiệt chưa lọc đã bù vượt 145°C phải cắt SSR ở lần publish kế tiếp dù nhiệt lọc còn thấp; không cắt bơm/van vì overtemp; recovery cần cả raw và filtered ≤145 | Host thermal scenarios; độ trễ vật lý chờ G10 |
+| G07 | CM-007 | **v17 bỏ cắt cứng mềm 145°C**: bảo vệ quá nhiệt do cầu chì nhiệt/thermostat phần cứng. Thermostat vẫn điều quanh setpoint; NTC ngoài dải latch E1 | Host thermal scenarios; độ trễ vật lý/thermal fuse chờ G10 |
 | G08 | UI/persistence | Startup 5s van đóng; wet/soak/press 2s mỗi pha; timer extraction riêng; clean timeout; edit save/timeout; không commit EEPROM liên tục; heat cả soak, giám sát sau pha ON dưới set/OFF từ set và xác nhận ổn định 3s; chốt SSR trước flash commit | Host regression |
 | G09 | Build ESP8266 | Compile/link sketch v15 với core/library thật; kiểm tra ISR nằm IRAM; lưu FQBN và phiên bản dependencies | Target compiler output + map |
 | G10 | Hardware | Wiring/default OFF/reset; boot straps; NTC đa điểm; SSR trigger, overshoot/cutoff, pump/valve hydraulics; power-loss/fuse | Bench log và số đo |

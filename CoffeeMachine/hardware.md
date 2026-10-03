@@ -26,8 +26,8 @@ Không dùng GPIO6–11 (flash). Không đổi D8 sang INPUT_PULLUP hoặc giữ
 - Display 4x74HC595, segment active-LOW, bytes đảo trong production. TM1637 trong test/ là module khác. Các tên COMMON_CATHODE trong test cũ không mô tả chính xác polarity code.
 - Divider 3.3V → 10k → A0 → NTC → GND. Defaults R0 185000Ω, Beta 4890K (fit 2 điểm NTC mới 2026-09-30 21:06) + offset +15 (v11, 2026-09-30 22:39); R0/Beta trong EEPROM v5 hợp lệ có thể khác defaults.
 - ADC rail checks ≤0.02V hoặc ≥3.28V; plausibility −40…300°C trước offset. Median 7 mẫu/6ms và lọc alpha0.25. NTC publish invalid latch E1; chưa publish boot hoặc không có mẫu hợp lệ mới runtime 2s latch E3.
-- Cutoff SSR xét raw đã bù và filtered >145°C; không phải thermal fuse, không bảo đảm nhiệt boiler thật. Overtemp tự hồi khi cả hai ≤145; bơm/van không bị cắt bởi riêng ngưỡng này.
-- Chu trình pha yêu cầu SSR ON cả khi bơm OFF trong soak; prime vẫn dùng pump-force. Nhưng BOOT_SAFE/fault/state lạ/mẫu stale/cutoff khóa heater. Unknown FSM E8, storage buffer/commit failure E6: mọi actuator OFF.
+- **Không còn cắt cứng mềm (v17).** Bảo vệ quá nhiệt dựa vào **cầu chì nhiệt/thermostat phần cứng độc lập**. Firmware chỉ thermostat quanh setpoint; E1 khi NTC ngoài dải.
+- Chu trình pha yêu cầu SSR ON cả khi bơm OFF trong soak; prime vẫn dùng pump-force. Nhưng BOOT_SAFE/fault/state lạ/mẫu stale khóa heater. Unknown FSM E8, storage buffer/commit failure E6: mọi actuator OFF.
 - SSR phải hỗ trợ kích 3.3V hoặc có driver phù hợp nguồn/input. Relay phải xác nhận active-HIGH. Bias phần cứng giữ mọi actuator OFF khi reset/unpowered; nguồn phải đủ khi ba tải cùng ON, mass low-voltage chung.
 - Mains cách ly low-voltage; sensor phải theo được nhiệt heater ở idle lẫn flowing. Thermal fuse và thermostat độc lập cần được xác minh trên thiết bị.
 - Flowmeter không quyết định liều, không có no-flow abort. Xác minh output điện (không đưa 5V push-pull vào GPIO).

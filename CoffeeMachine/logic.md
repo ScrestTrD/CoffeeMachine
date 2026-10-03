@@ -4,12 +4,14 @@
 
 ## Supervisor
 
-Mỗi tick: poll nút → sample NTC → supervisor/pre-cut nếu không được phép → FSM → áp yêu cầu nhiệt theo mode qua permission → LED. Permission dùng allowlist state vận hành; BOOT_SAFE/FAULT_LATCHED/state lạ luôn false. NTC phải hữu hạn, hợp lệ, mới dưới 2s; không fault; cả raw đã bù và control ≤145°C. State lạ latch E8.
+Mỗi tick: poll nút → sample NTC → supervisor/pre-cut nếu không được phép → FSM → áp yêu cầu nhiệt theo mode qua permission → LED. Permission dùng allowlist state vận hành; BOOT_SAFE/FAULT_LATCHED/state lạ luôn false. NTC phải hữu hạn, hợp lệ, mới dưới 2s; không fault. State lạ latch E8.
+
+**v18:** trong `brewingState`, `applyHeating()` ép D7 ON trước cửa permission (NTC lag/fault không ngắt được), và mỗi tick đang pha đặt `brewHeatUntilMs_ = now + 5000`; sau pha `inBrewHeatWindow()` giữ D7 ON đủ 5s rồi mới kiểm nhiệt. Trong cửa sổ đó `ntcTick` không latch fault NTC và pre-cut đầu tick bị bỏ qua. Cầu chì nhiệt là chốt an toàn phần cứng.
 
 Sensor lỗi runtime latch E1 ngay lần publish; không publish hợp lệ trong 2s latch E3. Lỗi storage/save latch E6. Latch tắt bơm/van/SSR tới reset, không bị lệnh chốt SSR đảo ngược.
 
 Có ba mode yêu cầu nhiệt: chu trình pha (RUN_PUMP_PREDELAY/RUN_ACTIVE/PRESET_RECORD_ACTIVE/CLEAN_FLUSH), hồi nhiệt, thermostat bình thường. Chu trình yêu cầu ON kể cả soak. Khi rời chu trình thật, arm hồi nhiệt; filtered<sp thìON, filtered≥sp thìOFF nhưng giữ giám sát. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. New cycle/fault xoá recovery cũ. Chọn/hủy trước pha không arm. Prime vẫn dùng pump-force/thermostat.
-Cuối preset/record, chuyển mode và chốt SSR trước EEPROM commit. Vòng lặp không ghi mức ON cũ trước khi xử lý stop; pre-cut không an toàn vẫn chạy trước FSM. Overtemp chỉ khóa SSR, tự hồi khi cả raw/control ≤145. Ngưỡng số đo không thay thermal fuse hoặc kết quả hiệu chuẩn thực.
+Cuối preset/record, chuyển mode và chốt SSR trước EEPROM commit. Vòng lặp không ghi mức ON cũ trước khi xử lý stop; pre-cut không an toàn vẫn chạy trước FSM. Không có cắt cứng mềm (v17): bảo vệ quá nhiệt là cầu chì nhiệt/thermostat phần cứng. Ngưỡng số đo không thay thermal fuse hoặc kết quả hiệu chuẩn thực.
 
 ## FSM và timer
 

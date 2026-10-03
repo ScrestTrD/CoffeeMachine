@@ -1,10 +1,10 @@
-# CoffeeMachine — firmware v15
+# CoffeeMachine — firmware v18
 
 Source controller NodeMCU ESP8266: [CoffeeMachine.ino](CoffeeMachine.ino). Source đã sửa và pass host/target gates G01–G09; xem [QA_STATUS](../docs/QA_STATUS.md) cho trạng thái kiểm chứng.
 
 ## Chức năng
 
-Thermostat ON/OFF 1°C hysteresis; chu trình pha ép yêu cầu gia nhiệt qua safety supervisor, kể cả soak bơm OFF. NTC median 7 mẫu/6ms, Beta conversion (R0 185000/Beta 4890, fit 2 điểm NTC mới), offset+15°C, low-pass alpha0.25. SSR cutoff xét cả nhiệt chưa lọc và nhiệt đã lọc >145°C. NTC/fault/storage/state lạ luôn thắng UI.
+Thermostat ON/OFF 1°C hysteresis; chu trình pha ép yêu cầu gia nhiệt qua safety supervisor, kể cả soak bơm OFF. **v18:** trong pha D7 không bao giờ ngắt kể cả NTC lag/fault, và giữ ON thêm 5s (`BREW_HEAT_HOLD_MS`) sau pha rồi mới kiểm nhiệt lại. NTC median 7 mẫu/6ms, Beta conversion (R0 185000/Beta 4890, fit 2 điểm NTC mới), offset 0, low-pass alpha 0.25. **Không còn cắt cứng mềm theo nhiệt độ (v17)** — bảo vệ quá nhiệt do cầu chì nhiệt/thermostat phần cứng; chỉ còn thermostat quanh setpoint và E1 khi NTC ngoài dải. NTC/fault/storage/state lạ luôn thắng UI.
 
 2 preset giây chiết, preamble 2+2+2s; 60s giới hạn pha chiết và ghi preset. Recording timeout hủy, không ghi đè. SET và RUN hold 2s dừng pha từ preamble. Xả vệ sinh có timeout 60s. Chỉnh setpoint 90–140°C bằng nút, không WiFi/PWM.
 

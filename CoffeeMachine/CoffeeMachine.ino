@@ -43,6 +43,16 @@
     - NTC_CAL_OFFSET_C +15 -> 0 C: bench reports uniform +15 HIGH at all marks
       vs reference, so the v11 trim now overshoots. v9 R0/Beta kept.
       CFG unchanged (offset is a code const; stored R0/Beta stay valid).
+  v17 (2026-10-03 09:37):
+    - Remove the software 145 C hard cutoff (ABS_OVERTEMP_C): the boiler has an
+      independent thermal fuse, so the SSR no longer cuts on temperature. The
+      thermostat still regulates around the setpoint and an out-of-range NTC
+      reading still faults (E1 > 300 C). CFG unchanged.
+  v18 (2026-10-03 09:42):
+    - Brew heat is unconditional: D7 stays ON for the whole brew cycle even if
+      the NTC is stale/invalid, and for BREW_HEAT_HOLD_MS (5 s) after the cycle
+      ends, then the temperature is checked again. NTC fault latching is
+      suppressed inside that window. Thermal fuse is the hardware backstop.
 */
 
 #include <Arduino.h>
@@ -52,7 +62,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 16;
+static const uint8_t FW_VERSION = 18;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -77,15 +87,12 @@ static const uint8_t FW_VERSION = 16;
 // ============================================================================
 
 // --- Temperature control (thermostat) ---------------------------------------
-// ABS_OVERTEMP_C is the SSR hard-cut ceiling, NOT the desired water temperature.
-// Invariants (machine-checked by the static_asserts below):
-//   SETPOINT_MAX_C < ABS_OVERTEMP_C   thermostat needs headroom to converge
-//   ABS_OVERTEMP_C < NTC_MAX_TEMP_C   else E1 latches before the cut fires
-constexpr float ABS_OVERTEMP_C      = 145.0f;
-constexpr float SETPOINT_HEADROOM_C = 5.0f;
+// No software over-temperature cutoff: the boiler has an independent thermal
+// fuse (and mechanical thermostat) as the hard safety. The firmware only
+// regulates around the setpoint; a wildly out-of-range NTC reading still faults.
 const float DEFAULT_SETPOINT_C  = 97.5f;
 const float SETPOINT_MIN_C      = 90.0f;
-constexpr float SETPOINT_MAX_C      = ABS_OVERTEMP_C - SETPOINT_HEADROOM_C;  // 140.0
+constexpr float SETPOINT_MAX_C  = 140.0f;  // product limit (adjustable max)
 constexpr float SETPOINT_STEP_C = 0.5f;   // constexpr: needed by the step assert below
 
 // On/off thermostat: the SSR is steady ON below (setpoint - 0.5 C) and steady
@@ -95,6 +102,9 @@ const float THERMOSTAT_HYSTERESIS_C = 1.0f;
 const uint32_t RECOVERY_STABLE_MS = 3000; // observation only, never forced heat
 const float RECOVERY_MAX_SWING_C = 0.10f; // entire confirmation-window range
 const float RECOVERY_MAX_DROP_C = 0.05f;  // fall from peak restarts confirmation
+// v18: D7 is never cut during a brew cycle, and stays ON for this long after
+// the cycle ends before the temperature is checked again (NTC can lag behind).
+const uint32_t BREW_HEAT_HOLD_MS = 5000;
 // Software noise tolerances; validate against the physical sensor on the bench.
 const float READY_BAND_C         = 2.0f;    // ready threshold below setpoint
 
@@ -107,7 +117,7 @@ const uint8_t NTC_SAMPLE_COUNT  = 7;         // samples per filtered reading
 const uint16_t NTC_SAMPLE_SPACE_MS = 6;      // spacing between raw samples
 const float NTC_ALPHA           = 0.25f;     // low-pass filter coefficient
 const float NTC_MIN_TEMP_C      = -40.0f;    // plausible sensor range
-constexpr float NTC_MAX_TEMP_C      = 300.0f;    // must stay above ABS_OVERTEMP_C
+constexpr float NTC_MAX_TEMP_C      = 300.0f;    // plausibility ceiling; reading above -> E1
 
 // NTC curve fitted 2026-09-30 21:06 on the NEW sensor, 2 steady end points
 // (owner judged the middle point noisy while heating):
@@ -123,11 +133,9 @@ constexpr float NTC_DEFAULT_BETA = 4890.0f;
 // multi-point data shows the error is not uniform.
 const float NTC_CAL_OFFSET_C = 0.0f;
 
-// Compile-time invariants for the boiler protection chain.
-static_assert(SETPOINT_MAX_C < ABS_OVERTEMP_C,
-              "setpoint must leave headroom below the SSR cut");
-static_assert(ABS_OVERTEMP_C < NTC_MAX_TEMP_C,
-              "cutoff must fire before the NTC plausible-range fault");
+// The setpoint must stay within the sensor's plausibility range.
+static_assert(SETPOINT_MAX_C < NTC_MAX_TEMP_C,
+              "setpoint must stay below the NTC plausibility ceiling");
 const uint32_t NTC_TIMEOUT_MS   = 2000;      // no valid sample -> fault
 
 // --- Flowmeter ---
@@ -219,8 +227,8 @@ enum FaultCode : uint8_t {
   FAULT_NTC_TIMEOUT   = 3,   // no valid sample within timeout
   FAULT_CRC           = 6,   // EEPROM begin/commit failure
   FAULT_STATE         = 8,   // unknown FSM state
-  // NOTE: absolute over-temp is NOT a fault here — the SSR just cuts at
-  // ABS_OVERTEMP_C (heatingPermission) and resumes automatically, no error.
+  // NOTE: there is no software over-temperature fault. The hardware thermal
+  // fuse is the hard safety; the firmware regulates only around the setpoint.
 };
 
 // ============================================================================
@@ -853,10 +861,12 @@ class CoffeeMachine {
       uint32_t now = millis();
       ntcTick(now);
 
-      // Cut an unsafe heater before any FSM work (including EEPROM writes).
+      // Cut an unsafe heater before any FSM work (including EEPROM writes),
+      // except during a brew / its heat hold, where D7 must stay ON.
       // Normal heat demand is applied AFTER transitions, avoiding stale pump/
       // thermostat writes at the start or end of a brew cycle.
-      if (!heatingPermission()) setActuatorSSR(false);
+      if (!brewingState(state) && !inBrewHeatWindow(now) && !heatingPermission())
+        setActuatorSSR(false);
 
       switch (state) {
         case BOOT_SAFE:            tickBootSafe(now); break;
@@ -906,21 +916,38 @@ class CoffeeMachine {
     uint32_t recoveryStableSince_ = 0, recoverySampleMs_ = 0;
     float recoverySetpoint_ = DEFAULT_SETPOINT_C;
     float recoveryMinT_ = 0.0f, recoveryMaxT_ = 0.0f;
+    // v18: while brewing (and for BREW_HEAT_HOLD_MS after), D7 is forced ON and
+    // NTC faults are not latched, so a lagging sensor cannot cut heat mid-brew.
+    uint32_t brewHeatUntilMs_ = 0;
 
     static bool brewingState(FsmState s) {
       return s == RUN_PUMP_PREDELAY || s == RUN_ACTIVE ||
              s == PRESET_RECORD_ACTIVE || s == CLEAN_FLUSH;
     }
 
+    // True from the start of a brew until BREW_HEAT_HOLD_MS after it ends.
+    // Wrap-safe signed comparison.
+    bool inBrewHeatWindow(uint32_t now) const {
+      return (int32_t)(brewHeatUntilMs_ - now) > 0;
+    }
+
     void applyHeating() {
+      const uint32_t now = millis();
+      // A brew always heats, and keeps D7 ON for the hold window afterwards,
+      // regardless of NTC faults/staleness or temperature (thermal fuse is the
+      // hardware backstop). The temperature is only re-checked after the hold.
+      if (brewingState(state)) {
+        brewHeatUntilMs_ = now + BREW_HEAT_HOLD_MS;
+        setActuatorSSR(true);
+        return;
+      }
+      if (inBrewHeatWindow(now)) {
+        setActuatorSSR(true);
+        return;
+      }
       if (!heatingPermission()) {
         recoveryStable_ = false;
         setActuatorSSR(false);
-        return;
-      }
-      if (brewingState(state)) {
-        // The complete cycle requests heat, including the pump-off soak.
-        setActuatorSSR(true);
         return;
       }
       if (recoveringHeat_) {
@@ -1029,6 +1056,9 @@ class CoffeeMachine {
     // Thermal / safety supervision (independent of UI state, spec §8).
     void ntcTick(uint32_t now) {
       if (!startupSensorsChecked || fault != FAULT_NONE) return;
+      // During a brew and its 5 s heat hold, a lagging/faulty NTC must not
+      // latch a fault (which would cut D7). Re-check once the hold ends.
+      if (brewingState(state) || inBrewHeatWindow(now)) return;
       FaultCode fc = ntc.faultCode();
       if (fc != FAULT_NONE) {
         latchFault(fc);
@@ -1050,8 +1080,7 @@ class CoffeeMachine {
       }
       return fault == FAULT_NONE && ntc.faultCode() == FAULT_NONE &&
              ntc.freshEnough(millis()) &&
-             isfinite(ntc.rawTemp()) && isfinite(ntc.controlTemp()) &&
-             ntc.rawTemp() <= ABS_OVERTEMP_C && ntc.controlTemp() <= ABS_OVERTEMP_C;
+             isfinite(ntc.rawTemp()) && isfinite(ntc.controlTemp());
     }
 
     // ---------- tick handlers ----------
@@ -1172,7 +1201,6 @@ class CoffeeMachine {
       return fault == FAULT_NONE && ntc.faultCode() == FAULT_NONE &&
              ntc.freshEnough(millis()) && isfinite(ntc.rawTemp()) &&
              isfinite(ntc.controlTemp()) &&
-             ntc.rawTemp() <= ABS_OVERTEMP_C && ntc.controlTemp() <= ABS_OVERTEMP_C &&
              ntc.controlTemp() >= (sp - READY_BAND_C);
     }
 

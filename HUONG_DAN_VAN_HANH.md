@@ -17,7 +17,7 @@ BOOT_SAFE hiện 15; prime/đun hiện 8888 nháy; READY hiện 0000/RUN steady 
 
 ## Đun trong pha và hồi nhiệt
 
-Trong pha/ghi preset, máy yêu cầu đun liên tục qua cả wet/ngâm/nén/chiết; bảo vệ145°C và lỗi NTC vẫn ưu tiên. Sau dừng/kết thúc/hủy/timeout/xả, nếu NTC sau lọc dưới nhiệt cài đặt thì tiếp tục đun; nếu đã đạt/vượt thì tắt ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không ép đun thêm vài giây.
+Trong pha/ghi preset, máy yêu cầu đun liên tục qua cả wet/ngâm/nén/chiết; lỗi NTC vẫn ưu tiên. Sau dừng/kết thúc/hủy/timeout/xả, nếu NTC sau lọc dưới nhiệt cài đặt thì tiếp tục đun; nếu đã đạt/vượt thì tắt ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không ép đun thêm vài giây.
 
 Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi tắt; kết thúc ở98°C thì tắt ngay. Trong giám sát, xuống97.2°C đã bật lại. Sau xác nhận ổn định và trở về thermostat thì dưới97°C mới bật. Độ trễ vật lý NTC vẫn cần đo. Công suất1400W có thể gây tăng nhiệt tiếp sau khi tắt; chưa có đo thực nghiệm mới trong lượt này.
 
@@ -25,7 +25,7 @@ Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi
 
 E1 NTC invalid, E3 timeout mẫu 2s, E6 storage init/save thất bại, E8 FSM state lạ. Fault latch tắt SSR/bơm/van đến reset. no nghĩa là chưa có preset hợp lệ.
 
-145°C xét cả nhiệt chưa lọc đã bù và nhiệt đã lọc; vượt ngưỡng cắt SSR tự hồi, bơm/van không bị cắt vì riêng overtemp. Không coi calibration +15°C là chứng nhận nhiệt boiler.
+Không còn cắt cứng mềm theo nhiệt độ (v17): bảo vệ quá nhiệt là cầu chì nhiệt/thermostat phần cứng độc lập. Firmware chỉ thermostat quanh setpoint; NTC ngoài dải latch E1. Không coi calibration là chứng nhận nhiệt boiler.
 
 ## Hiệu chuẩn và service
 

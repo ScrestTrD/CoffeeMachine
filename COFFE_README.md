@@ -14,10 +14,10 @@ Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng
 - Default 97.5°C; miền 90–140°C; snap 0.5°C, nút edit bước 1°C.
 - NTC defaults R0=185000Ω, Beta=4890K (fit 2 điểm NTC mới 32/86°C, 2026-09-30 21:06), divider 10k, A0 full-scale giả định theo bo này 3.3V.
 - 7 ADC samples cách 6ms, median rồi Beta (R0 185000/Beta 4890) + offset +15 (v11, đọc thấp đều 15); alpha=0.25 cho nhiệt điều khiển.
-- Cắt SSR khi nhiệt đã bù chưa lọc hoặc nhiệt đã lọc >145°C. Khôi phục chỉ khi cả hai ≤145°C; không latch overtemp và không cắt bơm/van vì riêng ngưỡng này.
+- **Không còn cắt cứng mềm theo nhiệt độ (v17).** Bảo vệ quá nhiệt bằng cầu chì nhiệt/thermostat phần cứng độc lập; firmware chỉ thermostat quanh setpoint.
 - Trong pha preset/ghi preset, SSR được yêu cầu ON suốt wet/soak/press/extraction, kể cả bơm OFF trong soak. Xả cũng yêu cầu đun suốt lúc chạy.
 - Kết thúc/dừng/hủy/timeout chu trình: NTC sau lọc <setpoint thì hồi nhiệt; ≥setpoint thì SSR OFF ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không có khoảng ép đun cố định hoặc mục tiêu +1/+2°C.
-- Safety permission luôn thắng: fault, freshness, BOOT_SAFE/state lạ và cutoff. Prime giữ pump-force/thermostat v11; hủy chọn trước khi pha không arm hồi nhiệt.
+- Safety permission luôn thắng: fault, freshness, BOOT_SAFE/state lạ. Prime giữ pump-force/thermostat; hủy chọn trước khi pha không arm hồi nhiệt.
 - Mẫu đầu phải hợp lệ trước prime. Không có publish lúc boot trong 2s: E3; ADC hở/chập/ngoài −40…300°C trước offset: E1. Sau startup, 2s không có mẫu hợp lệ mới: E3.
 - State lạ: E8; fault latch luôn tắt mọi actuator đến reset.
 
@@ -29,7 +29,7 @@ Không dùng GPIO6–11. Boot cần GPIO0/2 HIGH, GPIO15 LOW. Bias phần cứng
 | STARTUP_PRIME | 5s bơm ON/van đóng; gia nhiệt được phép, 8888 và 2 LED nháy 2Hz |
 | HEATING_IDLE | 8888 nháy 2Hz, RUN LED 1Hz |
 | READY_IDLE | 0000, RUN steady; tính lại readiness mỗi tick |
-| READY criteria | NTC hợp lệ/còn mới, không fault/quá nhiệt, control temp ≥setpoint−2°C |
+| READY criteria | NTC hợp lệ/còn mới, không fault, control temp ≥setpoint−2°C |
 | Chọn pha | RUN từ idle, SET đổi preset hợp lệ, RUN xác nhận; không có preset hiện no |
 | Preamble | 2s van+bơm ON → 2s bơm/van OFF → 2s bơm ON/van đóng; SSR vẫn yêu cầu ON qua safety |
 | RUN_ACTIVE | Thời gian liều tính từ mở van chiết; màn hình tính từ RUN bắt đầu |
@@ -61,7 +61,7 @@ EEPROM buffer setup (length/pointer) hoặc commit failure: E6, mọi actuator O
 | E8 | FSM state không hợp lệ |
 | no | Không có preset hợp lệ; không phải fault |
 
-Fault không tự clear khi UI đổi. Quá nhiệt >145°C là cắt SSR tự hồi, không mã lỗi.
+Fault không tự clear khi UI đổi. Không có cắt cứng mềm theo nhiệt độ (v17); quá nhiệt do cầu chì nhiệt/thermostat phần cứng xử lý.
 
 ## Gates
 
