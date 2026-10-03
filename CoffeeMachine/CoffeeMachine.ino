@@ -39,6 +39,10 @@
     - Monitor after brew: OFF at set, ON below set; return to thermostat only
       after fresh readings stay in [set, set+0.5 C] for 3 s; no timed heat boost.
     - Keep v11 NTC calibration, fault codes, 145 C cutoff and EEPROM v5.
+  v16 (2026-10-03):
+    - NTC_CAL_OFFSET_C +15 -> 0 C: bench reports uniform +15 HIGH at all marks
+      vs reference, so the v11 trim now overshoots. v9 R0/Beta kept.
+      CFG unchanged (offset is a code const; stored R0/Beta stay valid).
 */
 
 #include <Arduino.h>
@@ -48,7 +52,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 15;
+static const uint8_t FW_VERSION = 16;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -114,12 +118,10 @@ constexpr float NTC_MAX_TEMP_C      = 300.0f;    // must stay above ABS_OVERTEMP
 constexpr float NTC_DEFAULT_R0   = 185000.0f;
 constexpr float NTC_DEFAULT_BETA = 4890.0f;
 
-// Live single-point trim (2026-09-30 22:39): v9 fit reads uniformly ~15 C LOW
-// vs the reference thermometer in the working range, so add +15 AFTER the
-// Beta conversion and AFTER the plausibility check (fault range still guards
-// the raw sensor). Re-fit R0/Beta properly when steady multi-point data
-// shows the error is not uniform.
-const float NTC_CAL_OFFSET_C = 15.0f;
+// Bench 2026-10-03 reports uniform +15 HIGH at all marks vs reference,
+// so the v11 +15 trim is removed. Re-fit R0/Beta properly when steady
+// multi-point data shows the error is not uniform.
+const float NTC_CAL_OFFSET_C = 0.0f;
 
 // Compile-time invariants for the boiler protection chain.
 static_assert(SETPOINT_MAX_C < ABS_OVERTEMP_C,
@@ -495,7 +497,7 @@ class NtcSensor {
         return;
       }
       fault = FAULT_NONE;
-      float tCal = tRaw + NTC_CAL_OFFSET_C;   // v11 calibration: +15 C
+      float tCal = tRaw + NTC_CAL_OFFSET_C;   // v16: trim removed (0 C)
       lastRawT = tCal;
       lastValidMs = millis();
       if (!ctrlValid) {

@@ -26,7 +26,7 @@ const float NTC_T0_K     = 298.15f;   // 25 C (Kelvin)
 float NTC_R0             = 185000.0f; // fit 2 diem NTC moi 2026-09-30 21:06 (32/86 C)
 float NTC_B              = 4890.0f;
 // Offset -18 cu da bo (v8): loi that la do doc duong cong, khong phai offset deu.
-const float NTC_CAL_OFFSET_C = 15.0f;   // v11: bu +15, doc thap deu 15 (2026-09-30 22:39)
+const float NTC_CAL_OFFSET_C = 0.0f;   // v16: bench uniform +15 HIGH -> bo +15 (2026-10-03)
 const uint8_t  NTC_SAMPLE_COUNT   = 7;
 const uint16_t NTC_SAMPLE_SPACE_MS = 6;
 const float NTC_ALPHA    = 0.25f;     // loc thong thap
