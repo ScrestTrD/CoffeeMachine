@@ -81,6 +81,45 @@
   v23 (2026-10-03 10:25):
     - Post-brew boost lowered 20 -> 10 C. First power-up behaviour unchanged
       (the boost only runs after a brew cycle, never at boot).
+  v24 (2026-10-03 10:32):
+    - Boot guard: a software upper cap BOOT_HEAT_CAP_C = 150 C active only
+      from power-on until the first brew (then released so the post-brew boost
+      is not clipped). It holds the SSR off if the reading reaches the cap;
+      it is NOT a latched fault. Note: it reads the NTC, so a wrong reading at
+      boot can still escape it — the hardware thermal fuse remains the backstop.
+  v25 (2026-10-03 10:46):
+    - Replace the boot-only 150 C cap with a permanent safety cap HEAT_CAP_C =
+      120 C, active whenever NOT brewing (a brew always keeps heating). Bench
+      showed the NTC under-reads by ~24 C at high temperature (reading 146 while
+      the reference was 170), so the setpoint cannot be trusted as an upper
+      bound. The cap is a protective limit, not a setpoint, and auto-resumes
+      when the reading falls.
+  v26 (2026-10-03 11:03):
+    - NTC lag compensation (lead term). The sensor lags the real temperature in
+      both directions, so control now uses leadT = rawT + NTC_LEAD_S * rate
+      (rate C/s, smoothed, clamped). The thermostat, the post-brew recovery and
+      the 120 C cap act on leadT, so heat cuts early while rising and restarts
+      early while cooling. NTC_LEAD_S (default 10 s) is the tunable sensor time
+      constant; too high causes oscillation. A steady-state calibration error
+      (not lag) still needs a multi-point refit.
+  v27 (2026-10-03 11:10):
+    - Faster NTC window: NTC_SAMPLE_COUNT 7 -> 9, NTC_SAMPLE_SPACE_MS 6 -> 1,
+      so a reading takes ~9 ms instead of ~42 ms. Raw updates ~4.6x faster,
+      cutting measurement latency (the physical sensor lag remains).
+  v28 (2026-10-03 11:12):
+    - Estimate dT/dt over a fixed NTC_RATE_WINDOW_MS (500 ms) window instead of
+      between two consecutive readings. The fast v27 window made the 2-reading
+      rate dominated by quantization noise, so leadT swung +/-18 C even when
+      steady. The lead term is now stable.
+  v29 (2026-10-03 11:22):
+    - Debounce NTC faults: an isolated bad window (SSR-switching EMI is common
+      right when the heater cuts) no longer latches E1/E3. Only NTC_FAULT_DEBOUNCE
+      (5) consecutive bad windows raise the fault. Boot validation likewise only
+      latches a confirmed fault; a self-clearing glitch is ignored.
+  v30 (2026-10-03 11:40):
+    - During the brew preamble's 2 s soak phase (pump and valve already off) the
+      SSR is now OFF too; it resumes for the press/extraction phases. Other brew
+      phases still force D7 ON through faults/lag.
 */
 
 #include <Arduino.h>
@@ -90,7 +129,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 23;
+static const uint8_t FW_VERSION = 30;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -135,6 +174,11 @@ const float RECOVERY_MAX_DROP_C = 0.05f;  // fall from peak restarts confirmatio
 // RECOVERY_STABLE_MS, and only then handed back to the setpoint thermostat.
 const uint32_t BREW_HEAT_HOLD_MS = 5000;
 const float POST_BREW_BOOST_C = 10.0f;    // v23: post-brew target = setpoint + 10 C
+// v25: permanent software safety cap. The NTC reads low at high temperature,
+// so the SSR is cut whenever the reading reaches HEAT_CAP_C. Not a latched
+// fault: it auto-resumes when the reading falls. This is a protective limit,
+// not a setpoint, and it also applies during a brew.
+const float HEAT_CAP_C = 120.0f;
 // Software noise tolerances; validate against the physical sensor on the bench.
 const float READY_BAND_C         = 2.0f;    // ready threshold below setpoint
 // v19: the 8888 blink is a boot-only + cold indicator. During heat-up it blinks
@@ -146,8 +190,8 @@ const float NTC_R_SERIES        = 10000.0f;  // 10k divider top
 const float NTC_VCC             = 3.3f;      // rail
 const float NTC_ADC_FS          = 3.3f;      // confirmed A0 full-scale 0..3.3V
 const float NTC_T0_K            = 298.15f;   // 25 C in Kelvin
-const uint8_t NTC_SAMPLE_COUNT  = 7;         // samples per filtered reading
-const uint16_t NTC_SAMPLE_SPACE_MS = 6;      // spacing between raw samples
+const uint8_t NTC_SAMPLE_COUNT  = 9;         // samples per reading (median)
+const uint16_t NTC_SAMPLE_SPACE_MS = 1;      // spacing between raw samples (fast window ~9 ms)
 const float NTC_ALPHA           = 0.25f;     // low-pass filter coefficient
 const float NTC_MIN_TEMP_C      = -40.0f;    // plausible sensor range
 constexpr float NTC_MAX_TEMP_C      = 300.0f;    // plausibility ceiling; reading above -> E1
@@ -156,6 +200,19 @@ constexpr float NTC_MAX_TEMP_C      = 300.0f;    // plausibility ceiling; readin
 // agree before the first valid reading, so a corrupt first window cannot seed
 // the filter and drive the boiler.
 const float NTC_MAX_STEP_C      = 15.0f;
+// v26: thermal-lag lead compensation. The NTC lags the real temperature in both
+// directions (reading low while heating, high while water cools). Lead term:
+//   leadT = rawT + NTC_LEAD_S * rate   (rate in C/s, smoothed, clamped)
+// used for control so heat cuts early on the way up and restarts early on the
+// way down. NTC_LEAD_S is the effective sensor time constant; tune on the bench.
+const float NTC_LEAD_S          = 10.0f;   // seconds; increase if still overshoots
+const float NTC_LEAD_RATE_MAX   = 5.0f;    // clamp |dT/dt| so glitches cannot spike lead
+const float NTC_RATE_ALPHA      = 0.30f;   // smoothing of the rate estimate
+const uint32_t NTC_RATE_WINDOW_MS = 500;   // v28: measure dT/dt over this long window
+                                           // (faster windows made 2-window rates noise)
+// v29: how many consecutive bad NTC windows before latching E1/E3. A single
+// glitch (SSR switching EMI) must not latch a fault; only a persistent fault.
+const uint8_t NTC_FAULT_DEBOUNCE = 5;
 
 // NTC curve fitted 2026-09-30 21:06 on the NEW sensor, 2 steady end points
 // (owner judged the middle point noisy while heating):
@@ -472,6 +529,11 @@ class NtcSensor {
       fault = FAULT_NONE;
       haveSeed_ = false;
       seedT_ = 0.0f;
+      badCount_ = 0;
+      leadT_ = NAN;
+      rateCps_ = 0.0f;
+      rateRefMs_ = 0;
+      rateRefT_ = NAN;
     }
 
     void setParams(float r0, float beta) {
@@ -508,6 +570,10 @@ class NtcSensor {
     float rawTemp() const {
       return lastRawT;  // unfiltered, for fault checking
     }
+    // v26: lag-compensated temperature for control decisions.
+    float leadTemp() const {
+      return leadT_;
+    }
     float resistanceOhm() const {
       return lastRes;  // last measured NTC resistance
     }
@@ -539,11 +605,17 @@ class NtcSensor {
       float tRaw = (r > 0.0f && r < 1.0e9f) ? resistanceToTempC(r) : NAN;
 
       if (!isfinite(tRaw) || tRaw < NTC_MIN_TEMP_C || tRaw > NTC_MAX_TEMP_C) {
-        fault = FAULT_NTC_INVALID;
-        ctrlValid = false;   // stale control data must not remain valid
-        newPublish = true;
+        // v29: debounce. Ignore isolated glitches; only latch after several
+        // consecutive bad windows so SSR-switching EMI cannot raise E1.
+        if (badCount_ < 255) badCount_++;
+        if (badCount_ >= NTC_FAULT_DEBOUNCE) {
+          fault = FAULT_NTC_INVALID;
+          ctrlValid = false;   // stale control data must not remain valid
+          newPublish = true;
+        }
         return;
       }
+      badCount_ = 0;
       fault = FAULT_NONE;
       float tCal = tRaw + NTC_CAL_OFFSET_C;   // v16: trim removed (0 C)
 
@@ -569,6 +641,21 @@ class NtcSensor {
 
       lastRawT = tCal;
       lastValidMs = millis();
+      // v26/v28: estimate dT/dt over a fixed long window (stable), smoothed and
+      // clamped, then build the lead temperature.
+      if (!isfinite(rateRefT_)) {
+        rateRefT_ = tCal;
+        rateRefMs_ = lastValidMs;
+      } else if ((uint32_t)(lastValidMs - rateRefMs_) >= NTC_RATE_WINDOW_MS) {
+        float dt = (lastValidMs - rateRefMs_) / 1000.0f;
+        float r = (tCal - rateRefT_) / dt;
+        if (r > NTC_LEAD_RATE_MAX) r = NTC_LEAD_RATE_MAX;
+        if (r < -NTC_LEAD_RATE_MAX) r = -NTC_LEAD_RATE_MAX;
+        rateCps_ += NTC_RATE_ALPHA * (r - rateCps_);
+        rateRefT_ = tCal;
+        rateRefMs_ = lastValidMs;
+      }
+      leadT_ = tCal + NTC_LEAD_S * rateCps_;
       if (!ctrlValid) {
         lastCtrlT = tCal;
         ctrlValid = true;
@@ -589,6 +676,12 @@ class NtcSensor {
     FaultCode fault = FAULT_NONE;
     bool haveSeed_ = false;      // v21: cold-start two-window agreement
     float seedT_ = 0.0f;
+    uint8_t badCount_ = 0;       // v29: consecutive bad NTC windows (debounce)
+    // v26: lag compensation state
+    float leadT_ = NAN;
+    float rateCps_ = 0.0f;
+    uint32_t rateRefMs_ = 0;
+    float rateRefT_ = NAN;
     int samples[NTC_SAMPLE_COUNT];
 
     float adcToResistance(int raw) {
@@ -1003,11 +1096,30 @@ class CoffeeMachine {
 
     void applyHeating() {
       const uint32_t now = millis();
-      // A brew always heats, regardless of NTC faults/staleness or temperature
-      // (thermal fuse is the hardware backstop). Arm the fault-suppression hold.
+      // A brew ALWAYS heats, regardless of NTC faults/staleness, temperature or
+      // the safety cap (thermal fuse is the hardware backstop). Arm the hold.
+      // v30: except the 2 s soak phase of the preamble, where the SSR is OFF
+      // (pump and valve are off there too).
       if (brewingState(state)) {
         brewHeatUntilMs_ = now + BREW_HEAT_HOLD_MS;
-        setActuatorSSR(true);
+        bool soak = false;
+        if (state == RUN_PUMP_PREDELAY) {
+          uint32_t t = now - doseStartMs;
+          soak = (t >= DOSE_PREWET_MS && t < DOSE_PREWET_MS + DOSE_SOAK_MS);
+        } else if (state == PRESET_RECORD_ACTIVE) {
+          uint32_t t = now - recordStartMs;
+          soak = (t >= DOSE_PREWET_MS && t < DOSE_PREWET_MS + DOSE_SOAK_MS);
+        }
+        setActuatorSSR(!soak);
+        return;
+      }
+      // v25: hard software safety cap, active whenever NOT brewing. The NTC
+      // under-reads at high temperature, so never let the reading pass the cap;
+      // resume automatically once it falls. Not a latched fault.
+      if (ntc.valid() &&
+          (ntc.rawTemp() >= HEAT_CAP_C || ntc.controlTemp() >= HEAT_CAP_C ||
+           ntc.leadTemp() >= HEAT_CAP_C)) {
+        setActuatorSSR(false);
         return;
       }
       if (!heatingPermission()) {
@@ -1019,14 +1131,15 @@ class CoffeeMachine {
         const float sp = thermostat.getSetpoint();
         const float boostSp = sp + POST_BREW_BOOST_C;  // v22 post-brew target
         const float temp = ntc.controlTemp();   // filtered: used for stability detection
-        const float rawT = ntc.rawTemp();       // calibrated raw: catches cooling early
+        const float rawT = ntc.rawTemp();       // calibrated raw
+        const float leadT = ntc.leadTemp();     // v26: lag-compensated
         // A hot end stops heat, not monitoring.
         thermostat.clearHeatRequest();
-        // v22: raise immediately to setpoint + POST_BREW_BOOST_C and keep it
-        // there while RAW is below the target (raw beats filter lag). When the
+        // v22/v26: raise to setpoint + POST_BREW_BOOST_C and keep it there
+        // while the lag-compensated temperature is below the target. When the
         // target has been stable for RECOVERY_STABLE_MS, hand off to the normal
         // setpoint thermostat.
-        setActuatorSSR(rawT < boostSp);
+        setActuatorSSR(leadT < boostSp);
         if (sp != recoverySetpoint_) {
           recoveryStable_ = false;
           recoverySetpoint_ = sp;
@@ -1065,7 +1178,7 @@ class CoffeeMachine {
         }
         return;
       }
-      thermostat.update(ntc.controlTemp());
+      thermostat.update(ntc.leadTemp());   // v26: lag-compensated control temp
       setActuatorSSR(thermostat.heaterOn() || pumpOn_);
     }
 
@@ -1179,10 +1292,13 @@ class CoffeeMachine {
       if (!startupSensorsChecked) {
         if (ntc.fresh()) {
           ntc.clearFresh();
-          if (!ntc.valid()) {
-            latchFault(FAULT_NTC_INVALID);
+          // v29: a confirmed (debounced) fault latches; an isolated glitch that
+          // clears itself is ignored. Persistent failure still hits the timeout.
+          if (ntc.faultCode() != FAULT_NONE) {
+            latchFault(ntc.faultCode());
             return;
           }
+          if (!ntc.valid()) return;
           startupSensorsChecked = true;
           enterState(STARTUP_PRIME);
         } else if (elapsed(stateEnteredMs, NTC_TIMEOUT_MS)) {
