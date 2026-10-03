@@ -22,7 +22,7 @@ SET+RUN đủ 5s rồi nhả vào edit; RUN +1°C, SET −1°C trong 90–140°C
 
 ## Đun trong pha và hồi nhiệt
 
-Trong pha/ghi preset, máy yêu cầu đun liên tục qua cả wet/ngâm/nén/chiết; **v18: D7 không ngắt trong pha kể cả NTC lag/fault, và giữ ON thêm 5 giây sau pha rồi mới kiểm nhiệt lại**. Sau dừng/kết thúc/hủy/timeout/xả, nếu NTC sau lọc dưới nhiệt cài đặt thì tiếp tục đun; nếu đã đạt/vượt thì tắt ngay. Sau pha giữ giám sát: filtered < set bật SSR ngay, filtered ≥ set tắt ngay. Chỉ trả về thermostat ±0,5°C sau các mẫu mới liên tiếp trong [set, set+0,5°C] đủ 3 giây. Ra khỏi vùng, đổi set hoặc bị bảo vệ ngắt thì tính lại; mẫu cũ không kéo dài xác nhận. Đây là thời gian quan sát, không ép đun thêm. Không ép đun thêm vài giây.
+Trong pha/ghi preset, máy ép D7 ON liên tục qua cả wet/ngâm/nén/chiết (kể cả NTC lag/fault). **v22/v23: sau pha, đun theo nhiệt raw đẩy lên set + 10°C, giữ ổn định 5 giây, rồi handoff về thermostat setpoint (±0,5°C) để nồi nguội về set; boost không chạy lúc boot.** SET/RUN hold 2s dừng pha. Xả vệ sinh timeout 60s. Chỉnh setpoint 90–140°C bằng nút, không WiFi/PWM.
 
 Ví dụ set97.5°C: kết thúc pha ở97.25°C thì đun tới≥97.5°C rồi tắt; kết thúc ở98°C thì tắt ngay. Trong giám sát, xuống97.2°C đã bật lại. Sau xác nhận ổn định và trở về thermostat thì dưới97°C mới bật. Độ trễ vật lý NTC vẫn cần đo. Công suất1400W có thể gây tăng nhiệt tiếp sau khi tắt; chưa có đo thực nghiệm mới trong lượt này.
 

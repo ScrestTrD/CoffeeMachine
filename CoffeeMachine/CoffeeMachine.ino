@@ -53,6 +53,34 @@
       the NTC is stale/invalid, and for BREW_HEAT_HOLD_MS (5 s) after the cycle
       ends, then the temperature is checked again. NTC fault latching is
       suppressed inside that window. Thermal fuse is the hardware backstop.
+  v19 (2026-10-03 09:49):
+    - 8888 blink is boot-only plus a cold indicator: during heat-up it blinks
+      only while the boiler is below BLINK_BELOW_C (80 C); at/above 80 C it
+      shows 0000 and heats silently. Prime still blinks 8888 at boot.
+  v20 (2026-10-03 09:58):
+    - Post-brew recovery now keys on the calibrated RAW temperature (not the
+      lagging filtered value): D7 heats while raw < setpoint, so NTC/filter lag
+      can no longer leave the boiler cooling with D7 OFF. The 5 s hold stays as
+      the minimum.
+    - On handoff from recovery to the thermostat, seed heat ON when raw <
+      setpoint (Thermostat::requestHeat) to remove the sp-0.5 blind spot.
+  v21 (2026-10-03 10:03):
+    - NTC robustness: reject a physically impossible jump (> NTC_MAX_STEP_C)
+      between consecutive windows, and on cold start require two consecutive
+      agreeing windows before the first valid reading. A corrupt first ADC
+      window can no longer seed the filter and drive the boiler hot at boot.
+  v22 (2026-10-03 10:15):
+    - Post-brew behaviour changed: on leaving a brew, drive the boiler UP to
+      setpoint + POST_BREW_BOOST_C (20 C) and hold it stable there for
+      RECOVERY_STABLE_MS (5 s), then hand back to the normal setpoint
+      thermostat. Heating uses the calibrated raw temperature. The old
+      unconditional 5 s post-brew force-ON is removed (the boost target
+      replaces it); the fault-suppression window stays.
+      NOTE: target can reach setpoint_max(140) + 20 = 160 C — keep the
+      hardware thermal fuse as the backstop.
+  v23 (2026-10-03 10:25):
+    - Post-brew boost lowered 20 -> 10 C. First power-up behaviour unchanged
+      (the boost only runs after a brew cycle, never at boot).
 */
 
 #include <Arduino.h>
@@ -62,7 +90,7 @@
 
 // Firmware version shown during BOOT_SAFE. This is not a binary hash:
 // distinct builds may share a version; verify uploaded artifacts separately.
-static const uint8_t FW_VERSION = 18;
+static const uint8_t FW_VERSION = 23;
 
 // ============================================================================
 //  1. PIN MAP  (COFFE_README section 2)
@@ -99,14 +127,19 @@ constexpr float SETPOINT_STEP_C = 0.5f;   // constexpr: needed by the step asser
 // OFF at/above (setpoint + 0.5 C). Total dead-band = 1 C around the setpoint.
 // No PWM, no time-proportional window.
 const float THERMOSTAT_HYSTERESIS_C = 1.0f;
-const uint32_t RECOVERY_STABLE_MS = 3000; // observation only, never forced heat
+const uint32_t RECOVERY_STABLE_MS = 5000; // v22: hold this long at the boost target
 const float RECOVERY_MAX_SWING_C = 0.10f; // entire confirmation-window range
 const float RECOVERY_MAX_DROP_C = 0.05f;  // fall from peak restarts confirmation
-// v18: D7 is never cut during a brew cycle, and stays ON for this long after
-// the cycle ends before the temperature is checked again (NTC can lag behind).
+// v18/v22: D7 is never cut during a brew cycle. After the cycle ends the boiler
+// is driven up to POST_BREW_BOOST_C above the setpoint, held stable there for
+// RECOVERY_STABLE_MS, and only then handed back to the setpoint thermostat.
 const uint32_t BREW_HEAT_HOLD_MS = 5000;
+const float POST_BREW_BOOST_C = 10.0f;    // v23: post-brew target = setpoint + 10 C
 // Software noise tolerances; validate against the physical sensor on the bench.
 const float READY_BAND_C         = 2.0f;    // ready threshold below setpoint
+// v19: the 8888 blink is a boot-only + cold indicator. During heat-up it blinks
+// only while the boiler is still below this; above it, heat silently (0000).
+const float BLINK_BELOW_C        = 80.0f;
 
 // --- NTC measurement (COFFE_README section 4) ---
 const float NTC_R_SERIES        = 10000.0f;  // 10k divider top
@@ -118,6 +151,11 @@ const uint16_t NTC_SAMPLE_SPACE_MS = 6;      // spacing between raw samples
 const float NTC_ALPHA           = 0.25f;     // low-pass filter coefficient
 const float NTC_MIN_TEMP_C      = -40.0f;    // plausible sensor range
 constexpr float NTC_MAX_TEMP_C      = 300.0f;    // plausibility ceiling; reading above -> E1
+// v21: reject an implausible jump between consecutive windows (a real boiler
+// cannot move this fast in ~42 ms) and require two consecutive boot windows to
+// agree before the first valid reading, so a corrupt first window cannot seed
+// the filter and drive the boiler.
+const float NTC_MAX_STEP_C      = 15.0f;
 
 // NTC curve fitted 2026-09-30 21:06 on the NEW sensor, 2 steady end points
 // (owner judged the middle point noisy while heating):
@@ -432,6 +470,8 @@ class NtcSensor {
       lastValidMs = 0;
       newPublish = false;
       fault = FAULT_NONE;
+      haveSeed_ = false;
+      seedT_ = 0.0f;
     }
 
     void setParams(float r0, float beta) {
@@ -506,6 +546,27 @@ class NtcSensor {
       }
       fault = FAULT_NONE;
       float tCal = tRaw + NTC_CAL_OFFSET_C;   // v16: trim removed (0 C)
+
+      // v21 robustness: reject physically impossible jumps, and on cold start
+      // require two consecutive agreeing windows before publishing. This keeps
+      // a corrupt first ADC window from seeding the filter (and overheating).
+      if (ctrlValid) {
+        if (fabsf(tCal - lastRawT) > NTC_MAX_STEP_C) {
+          newPublish = false;   // glitch: keep the previous good reading
+          return;
+        }
+      } else {
+        if (!haveSeed_) {
+          seedT_ = tCal; haveSeed_ = true; newPublish = false;
+          return;
+        }
+        if (fabsf(tCal - seedT_) > NTC_MAX_STEP_C) {
+          seedT_ = tCal; newPublish = false;   // still settling; re-seed
+          return;
+        }
+        haveSeed_ = false;      // two windows agree -> accept
+      }
+
       lastRawT = tCal;
       lastValidMs = millis();
       if (!ctrlValid) {
@@ -526,6 +587,8 @@ class NtcSensor {
     uint32_t lastValidMs = 0;
     bool newPublish = false;
     FaultCode fault = FAULT_NONE;
+    bool haveSeed_ = false;      // v21: cold-start two-window agreement
+    float seedT_ = 0.0f;
     int samples[NTC_SAMPLE_COUNT];
 
     float adcToResistance(int raw) {
@@ -796,6 +859,13 @@ class Thermostat {
       heaterOn_ = false;
     }
 
+    // v20: seed the heat request ON when handing off from recovery while the
+    // boiler is still below the setpoint, so the normal dead-band (sp-0.5)
+    // cannot create a blind spot right after a brew.
+    void requestHeat() {
+      heaterOn_ = true;
+    }
+
   private:
     float setpoint;
     bool heaterOn_;
@@ -933,15 +1003,10 @@ class CoffeeMachine {
 
     void applyHeating() {
       const uint32_t now = millis();
-      // A brew always heats, and keeps D7 ON for the hold window afterwards,
-      // regardless of NTC faults/staleness or temperature (thermal fuse is the
-      // hardware backstop). The temperature is only re-checked after the hold.
+      // A brew always heats, regardless of NTC faults/staleness or temperature
+      // (thermal fuse is the hardware backstop). Arm the fault-suppression hold.
       if (brewingState(state)) {
         brewHeatUntilMs_ = now + BREW_HEAT_HOLD_MS;
-        setActuatorSSR(true);
-        return;
-      }
-      if (inBrewHeatWindow(now)) {
         setActuatorSSR(true);
         return;
       }
@@ -952,16 +1017,22 @@ class CoffeeMachine {
       }
       if (recoveringHeat_) {
         const float sp = thermostat.getSetpoint();
-        const float temp = ntc.controlTemp();
-        // A hot end stops heat, not monitoring. A later dip reheats at set.
+        const float boostSp = sp + POST_BREW_BOOST_C;  // v22 post-brew target
+        const float temp = ntc.controlTemp();   // filtered: used for stability detection
+        const float rawT = ntc.rawTemp();       // calibrated raw: catches cooling early
+        // A hot end stops heat, not monitoring.
         thermostat.clearHeatRequest();
-        setActuatorSSR(temp < sp);
+        // v22: raise immediately to setpoint + POST_BREW_BOOST_C and keep it
+        // there while RAW is below the target (raw beats filter lag). When the
+        // target has been stable for RECOVERY_STABLE_MS, hand off to the normal
+        // setpoint thermostat.
+        setActuatorSSR(rawT < boostSp);
         if (sp != recoverySetpoint_) {
           recoveryStable_ = false;
           recoverySetpoint_ = sp;
           recoverySampleMs_ = ntc.measurementMs();
         }
-        if (temp < sp || temp > sp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
+        if (temp < boostSp || temp > boostSp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
           recoveryStable_ = false;
         }
         const uint32_t sampleMs = ntc.measurementMs();
@@ -971,7 +1042,7 @@ class CoffeeMachine {
           if (uint32_t(sampleMs - recoverySampleMs_) >= NTC_TIMEOUT_MS)
             recoveryStable_ = false;
           recoverySampleMs_ = sampleMs;
-          if (temp >= sp && temp <= sp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
+          if (temp >= boostSp && temp <= boostSp + THERMOSTAT_HYSTERESIS_C * 0.5f) {
             if (recoveryStable_) {
               if (temp < recoveryMinT_) recoveryMinT_ = temp;
               if (temp > recoveryMaxT_) recoveryMaxT_ = temp;
@@ -986,6 +1057,9 @@ class CoffeeMachine {
             } else if (uint32_t(sampleMs - recoveryStableSince_) >= RECOVERY_STABLE_MS) {
               recoveringHeat_ = false;
               recoveryStable_ = false;
+              // Seed the thermostat ON only if still below the setpoint after
+              // the boost handoff (usually above, so it cools back to set).
+              if (isfinite(rawT) && rawT < sp) thermostat.requestHeat();
             }
           }
         }
@@ -1084,10 +1158,16 @@ class CoffeeMachine {
     }
 
     // ---------- tick handlers ----------
-    // 2 Hz blink shared by the startup purge and the heat-up phase. It stops
-    // only when the boiler reaches the setpoint (-> READY_IDLE).
+    // 2 Hz blink used by the startup prime and the cold heat-up phase.
     void dispBlink(uint32_t now) {
       if (now % 500 < 250) disp.allSegments(); else disp.blank();
+    }
+
+    // Heat-up display: blink 8888 only while the boiler is still cold; once it
+    // is above BLINK_BELOW_C, stay quiet (0000) while the thermostat heats.
+    void dispHeat(uint32_t now) {
+      if (ntc.valid() && ntc.controlTemp() < BLINK_BELOW_C) dispBlink(now);
+      else disp.number(0, true);
     }
 
     void tickBootSafe(uint32_t /*now*/) {
@@ -1128,9 +1208,9 @@ class CoffeeMachine {
     }
 
     void tickHeatingIdle(uint32_t now) {
-      // Keep blinking until the boiler actually reaches the setpoint; it stops
-      // only on the READY transition below (setpoint - READY_BAND_C).
-      dispBlink(now);
+      // Blink 8888 only while cold (< BLINK_BELOW_C); above that, show 0000
+      // and let the thermostat heat quietly until READY.
+      dispHeat(now);
       // ready check
       if (readyNow(thermostat.getSetpoint())) {
         // Same idle UI, different thermal indication: retain held gestures.
@@ -1186,7 +1266,7 @@ class CoffeeMachine {
     void tickReadyIdle(uint32_t now) {
       if (!readyNow(thermostat.getSetpoint())) {
         enterState(HEATING_IDLE);
-        dispBlink(now);
+        dispHeat(now);
         handleIdleGestures(now);
         return;
       }
