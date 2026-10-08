@@ -31,3 +31,5 @@ Tài liệu chi tiết:
 Lưu ý: `Preview_AP.html` là mockup lịch sử; source hiện hành không có WiFi AP, HTTP handler hoặc OTA. Dosing theo timer giây (không phụ thuộc xung flowmeter trong điều khiển FSM).
 
 <!-- verified pair badge trigger -->
+
+<!-- pair verify slnctrz author + scresttrd coauthor -->
