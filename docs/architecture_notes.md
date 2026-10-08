@@ -174,3 +174,7 @@
 ### docs(telemetry): add error code diagnostic lookup table
 - **Mô tả**: Bảng tra cứu mã lỗi E1-E5 cho kỹ thuật viên vận hành bảo dưỡng.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(steam): document steam wand thermal cutoff protection
+- **Mô tả**: Bảo vệ ngắt nhiệt thanh gia nhiệt vòi sục sữa khi cạn nước.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
