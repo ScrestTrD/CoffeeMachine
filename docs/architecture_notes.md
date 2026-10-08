@@ -54,3 +54,7 @@
 ### docs(flowmeter): describe hall effect pulse counter scaling
 - **Mô tả**: Tỷ lệ xung cảm biến lưu lượng dòng chảy tính trên mỗi ml nước chiết.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(pressure): document OPV valve threshold calibration
+- **Mô tả**: Hiệu chuẩn van áp suất quá tải OPV bảo vệ đường ống chiết xuất.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
