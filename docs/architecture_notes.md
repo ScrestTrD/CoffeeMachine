@@ -74,3 +74,7 @@
 ### docs(qa): document end-to-end hardware-in-the-loop tests
 - **Mô tả**: Mô tả quy trình kiểm thử tự động HIL với board mạch giả lập cảm biến.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(telemetry): add error code diagnostic lookup table
+- **Mô tả**: Bảng tra cứu mã lỗi E1-E5 cho kỹ thuật viên vận hành bảo dưỡng.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
