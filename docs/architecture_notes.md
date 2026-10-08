@@ -70,3 +70,7 @@
 ### docs(grinder): add optional serial grinder synchronization note
 - **Mô tả**: Ghi chú giao thức đồng bộ cối xay cà phê qua cổng nối tiếp tương lai.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(qa): document end-to-end hardware-in-the-loop tests
+- **Mô tả**: Mô tả quy trình kiểm thử tự động HIL với board mạch giả lập cảm biến.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
