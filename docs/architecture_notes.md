@@ -146,3 +146,7 @@
 ### docs(maintenance): add weekly descale maintenance schedule
 - **Mô tả**: Lịch trình bảo dưỡng tẩy cặn định kỳ bằng dung dịch acid citric.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(flowmeter): describe hall effect pulse counter scaling
+- **Mô tả**: Tỷ lệ xung cảm biến lưu lượng dòng chảy tính trên mỗi ml nước chiết.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
