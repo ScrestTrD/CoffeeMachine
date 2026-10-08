@@ -66,3 +66,7 @@
 ### docs(boiler): document dual-boiler temperature decoupling
 - **Mô tả**: Nguyên lý độc lập nhiệt giữa nồi hơi pha cà phê và nồi hơi tạo bọt sữa.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(grinder): add optional serial grinder synchronization note
+- **Mô tả**: Ghi chú giao thức đồng bộ cối xay cà phê qua cổng nối tiếp tương lai.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
