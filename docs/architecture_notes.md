@@ -82,3 +82,7 @@
 ### docs(steam): document steam wand thermal cutoff protection
 - **Mô tả**: Bảo vệ ngắt nhiệt thanh gia nhiệt vòi sục sữa khi cạn nước.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(pump): note ulka vibration pump duty cycle restrictions
+- **Mô tả**: Giới hạn chu kỳ làm việc liên tục của bơm rung Ulka chống quá nhiệt cuộn dây.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
