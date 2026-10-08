@@ -22,3 +22,7 @@
 ### docs(ops): note emergency shutdown hotkey sequence
 - **Mô tả**: Ghi chú tổ hợp nút dừng khẩn cấp hệ thống đun và bơm khi có sự cố.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(eeprom): document memory allocation map for user presets
+- **Mô tả**: Bản đồ phân vùng nhớ EEPROM lưu các cấu hình nhiệt độ và định lượng nước.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
