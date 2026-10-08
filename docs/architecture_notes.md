@@ -46,3 +46,7 @@
 ### docs(ota): add firmware flashing guidelines via nodemcu usb
 - **Mô tả**: Hướng dẫn nạp firmware an toàn qua cổng USB CH340 của NodeMCU.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(maintenance): add weekly descale maintenance schedule
+- **Mô tả**: Lịch trình bảo dưỡng tẩy cặn định kỳ bằng dung dịch acid citric.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
