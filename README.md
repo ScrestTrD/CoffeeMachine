@@ -12,7 +12,7 @@ Phiên bản hiện hành: **v30** (`FW_VERSION = 30`).
 - **Tắt SSR trong 2s soak**: Trong pha soak của chu trình ngâm ủ preamble (bơm và van đều tắt), SSR cũng được tắt; SSR bật lại ở pha nén và chiết.
 - **Hồi nhiệt sau pha (`POST_BREW_BOOST_C = 10°C`)**: Sau khi kết thúc pha, hệ thống bù nhiệt đẩy lên `setpoint + 10°C`, giữ ổn định 5 giây (`RECOVERY_STABLE_MS = 5000`) theo `leadTemp()` rồi mới chuyển giao về thermostat bình thường.
 
-Repository gateway: `/mnt/pc-dev/CoffeMachine`, qua share `//192.168.1.171/Develop`. PC .171: `H:\Develop\CoffeMachine`.
+Repository gateway: `/mnt/pc-dev/ScrestTrD/CoffeMachine`, qua share `//192.168.1.171/Develop`. PC .171: `H:\Develop\ScrestTrD\CoffeMachine`.
 
 ## Build và vận hành
 
