@@ -34,3 +34,7 @@
 ### docs(sensor): document water level probe conductivity thresholds
 - **Mô tả**: Ngưỡng đo điện dẫn que thăm mực nước bình chứa.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(thermostat): add PID tuning parameters reference table
+- **Mô tả**: Bảng tham chiếu hệ số PID nhiệt độ nồi hơi cho các loại hạt rang khác nhau.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
