@@ -114,3 +114,7 @@
 ### docs(recovery): clarify post-brew boost temperature recovery
 - **Mô tả**: Mô tả cơ chế đẩy nhiệt thêm 10 độ C sau chiết xuất và thời gian ổn định 5s.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(ops): note emergency shutdown hotkey sequence
+- **Mô tả**: Ghi chú tổ hợp nút dừng khẩn cấp hệ thống đun và bơm khi có sự cố.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
