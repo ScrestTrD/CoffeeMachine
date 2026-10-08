@@ -158,3 +158,7 @@
 ### docs(network): note future esp8266 telemetry websocket schema
 - **Mô tả**: Phác thảo schema bản tin WebSocket đo từ xa gửi về dashboard local.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(boiler): document dual-boiler temperature decoupling
+- **Mô tả**: Nguyên lý độc lập nhiệt giữa nồi hơi pha cà phê và nồi hơi tạo bọt sữa.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
