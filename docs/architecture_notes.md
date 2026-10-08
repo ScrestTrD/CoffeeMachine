@@ -138,3 +138,7 @@
 ### docs(wiring): clarify 220V AC isolation barrier clearance
 - **Mô tả**: Quy định khoảng cách cách điện an toàn cho phần rơ-le bán dẫn SSR 220V.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(ota): add firmware flashing guidelines via nodemcu usb
+- **Mô tả**: Hướng dẫn nạp firmware an toàn qua cổng USB CH340 của NodeMCU.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
