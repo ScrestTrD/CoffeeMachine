@@ -58,3 +58,7 @@
 ### docs(pressure): document OPV valve threshold calibration
 - **Mô tả**: Hiệu chuẩn van áp suất quá tải OPV bảo vệ đường ống chiết xuất.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(network): note future esp8266 telemetry websocket schema
+- **Mô tả**: Phác thảo schema bản tin WebSocket đo từ xa gửi về dashboard local.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
