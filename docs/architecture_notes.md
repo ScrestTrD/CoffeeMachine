@@ -86,3 +86,7 @@
 ### docs(pump): note ulka vibration pump duty cycle restrictions
 - **Mô tả**: Giới hạn chu kỳ làm việc liên tục của bơm rung Ulka chống quá nhiệt cuộn dây.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(spec): summarize electrical power budget specifications
+- **Mô tả**: Tổng kết công suất tiêu thụ tối đa của toàn bộ linh kiện hệ thống máy.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
