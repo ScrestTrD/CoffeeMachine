@@ -110,3 +110,7 @@
 ### docs(firmware): document pre-infusion soak timing constraints
 - **Mô tả**: Chi tiết về khoảng thời gian soak 2s trong chu trình ngâm ủ cà phê.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(recovery): clarify post-brew boost temperature recovery
+- **Mô tả**: Mô tả cơ chế đẩy nhiệt thêm 10 độ C sau chiết xuất và thời gian ổn định 5s.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
