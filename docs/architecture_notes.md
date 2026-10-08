@@ -38,3 +38,7 @@
 ### docs(thermostat): add PID tuning parameters reference table
 - **Mô tả**: Bảng tham chiếu hệ số PID nhiệt độ nồi hơi cho các loại hạt rang khác nhau.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(wiring): clarify 220V AC isolation barrier clearance
+- **Mô tả**: Quy định khoảng cách cách điện an toàn cho phần rơ-le bán dẫn SSR 220V.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
