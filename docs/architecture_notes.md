@@ -106,3 +106,7 @@
 ### docs(flow): describe 74HC595 shift register pinout layout
 - **Mô tả**: Ghi chú sơ đồ chân kết nối IC ghi dịch 74HC595 điều khiển cụm van và bơm.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(firmware): document pre-infusion soak timing constraints
+- **Mô tả**: Chi tiết về khoảng thời gian soak 2s trong chu trình ngâm ủ cà phê.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
