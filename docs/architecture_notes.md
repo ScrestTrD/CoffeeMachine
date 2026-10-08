@@ -126,3 +126,7 @@
 ### docs(ui): specify display refresh rate and debounce intervals
 - **Mô tả**: Tần số quét màn hình LED 7 đoạn và thời gian debounce nút nhấn.
 - **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
+
+### docs(sensor): document water level probe conductivity thresholds
+- **Mô tả**: Ngưỡng đo điện dẫn que thăm mực nước bình chứa.
+- **Cập nhật**: Vòng lặp cải tiến tài liệu firmware v30.
